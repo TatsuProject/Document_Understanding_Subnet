@@ -8,7 +8,7 @@
 
 ## Installation
 
-To set up the Tatsu Identity Subnet project, follow these steps:
+To set up this Subnet project, follow these steps:
 
 1. Clone the repository:
    ```bash
