@@ -13,7 +13,7 @@ To set up the Tatsu Identity Subnet project, follow these steps:
 1. Clone the repository:
    ```bash
    git clone https://github.com/TatsuProject/Document_Understanding_Subnet
-   cd Identity-Subnet
+   cd Document_Understanding_Subnet
    ```
 
 2. Install the required dependencies:
