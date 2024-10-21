@@ -25,7 +25,7 @@ import sys
 import os
 
 # Add the parent directory to the system path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Bittensor Miner Template:
 import template
 
@@ -104,6 +104,9 @@ class Miner(BaseMinerNeuron):
         time.sleep(10)
         checkbox_result = self.postprocess(synapse.img_path, synapse.task_id)
         synapse.checkbox_output = checkbox_result
+        print("****************")
+        print(synapse.checkbox_output)
+        print("****************")
         return synapse
 
     async def blacklist(

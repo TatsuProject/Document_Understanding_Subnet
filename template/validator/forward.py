@@ -25,12 +25,12 @@ import bittensor as bt
 # from template.utils.uids import get_random_uids
 
 
-from uids import get_random_uids
+from template.validator.uids import get_random_uids
 from template.protocol import ProfileSynapse
 import uuid
 
 from fuzzywuzzy import fuzz
-from reward import get_rewards
+from template.validator.reward import get_rewards
 import requests
 import base64
 import sys
