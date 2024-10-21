@@ -133,7 +133,7 @@ def process_weights_for_netuid(
     Union[ndarray[Any, dtype[floating[Any]]], ndarray[Any, dtype[complexfloating[Any, Any]]]], Any]], tuple[
     ndarray[Any, dtype[Any]], ndarray], tuple[Any, ndarray]]:
     bittensor.logging.debug("process_weights_for_netuid()")
-    bittensor.logging.debug("weights", weights)
+    bittensor.logging.debug(f"weights: {weights}")
     bittensor.logging.debug("netuid", netuid)
     bittensor.logging.debug("subtensor", subtensor)
     bittensor.logging.debug("metagraph", metagraph)
@@ -180,7 +180,7 @@ def process_weights_for_netuid(
         )
         return np.arange(len(normalized_weights)), normalized_weights
 
-    bittensor.logging.debug("non_zero_weights", non_zero_weights)
+    bittensor.logging.debug(f"non_zero_weights, {non_zero_weights}")
 
     # Compute the exclude quantile and find the weights in the lowest quantile
     max_exclude = max(0, len(non_zero_weights) - min_allowed_weights) / len(
@@ -195,13 +195,13 @@ def process_weights_for_netuid(
     # Exclude all weights below the allowed quantile.
     non_zero_weight_uids = non_zero_weight_uids[lowest_quantile <= non_zero_weights]
     non_zero_weights = non_zero_weights[lowest_quantile <= non_zero_weights]
-    bittensor.logging.debug("non_zero_weight_uids", non_zero_weight_uids)
-    bittensor.logging.debug("non_zero_weights", non_zero_weights)
+    bittensor.logging.debug(f"non_zero_weight_uids, {non_zero_weight_uids}")
+    bittensor.logging.debug(f"non_zero_weights, {non_zero_weights}")
 
     # Normalize weights and return.
     normalized_weights = normalize_max_weight(
         x=non_zero_weights, limit=max_weight_limit
     )
-    bittensor.logging.debug("final_weights", normalized_weights)
+    bittensor.logging.debug(f"final_weights, {normalized_weights}")
 
     return non_zero_weight_uids, normalized_weights

@@ -22,6 +22,11 @@ import time
 
 # Bittensor
 import bittensor as bt
+import sys
+import os
+
+# Add the parent directory to the system path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # import base validator class which takes care of most of the boilerplate
 from template.base.validator import BaseValidatorNeuron

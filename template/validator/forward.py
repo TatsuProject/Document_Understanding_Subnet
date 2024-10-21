@@ -20,10 +20,79 @@
 import time
 import bittensor as bt
 
-from template.protocol import Dummy
-from template.validator.reward import get_rewards
-from template.utils.uids import get_random_uids
+# from template.protocol import Dummy
+# from template.validator.reward import get_rewards
+# from template.utils.uids import get_random_uids
 
+
+from uids import get_random_uids
+from template.protocol import ProfileSynapse
+import uuid
+
+from fuzzywuzzy import fuzz
+from reward import get_rewards
+import requests
+import base64
+import sys
+import os
+
+
+def get_random_image_path():
+    url = 'http://3.21.227.102:3000/api/tatsu/random'
+    
+    # Send a GET request to the API
+    response = requests.get(url)
+    
+    # Check if the request was successful
+    if response.status_code == 200:
+        # Parse the response JSON
+        response_data = response.json()
+        
+        if response_data.get('status') is True:
+            # Access the 'data' section which contains image and labels
+            data = response_data.get('data')
+            
+            if data:
+                image_url = data.get('image_url')
+                label_data = data.get('data')  # Label information inside 'data' key
+                
+                if image_url and label_data:
+                    # Get the image file name from the URL
+                    image_name = os.path.basename(image_url)
+                    
+                    # Fetch the image (binary format)
+                    image_response = requests.get(image_url)
+                    if image_response.status_code == 200:
+                        image = image_response.content  # Image in binary format
+                        
+                    # JSON label in dictionary format
+                    json_label = label_data  # Already a dictionary
+
+                    print(f"Successfully retrieved image and label.")
+                else:
+                    print("Error: Could not retrieve image URL or label data.")
+                    return None, None
+            else:
+                print("Error: 'data' field is missing in the response.")
+                return None, None
+        else:
+            print("Error: The request status is False.")
+            return None, None
+    else:
+        print(f"Failed to retrieve data. Status code: {response.status_code}")
+        return None, None
+
+    # Generate a UUID for the task
+    _id = str(uuid.uuid4())
+    image_base64 = base64.b64encode(image).decode('utf-8')
+
+    return json_label, ProfileSynapse(
+        task_id=_id,
+        task_type="got from api",
+        img_path=image_base64,  # Image in binary format
+        checkbox_output=[],  # This would be updated later
+        score=0  # The score will be calculated by the miner
+    )
 
 async def forward(self):
     """
@@ -37,27 +106,21 @@ async def forward(self):
     """
     # TODO(developer): Define how the validator selects a miner to query, how often, etc.
     # get_random_uids is an example method, but you can replace it with your own.
+    ground_truth, task = get_random_image_path()
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-
-    # The dendrite client queries the network.
+    # synapse.img = img_path
+    start_time = time.time()
     responses = await self.dendrite(
         # Send the query to selected miner axons in the network.
         axons=[self.metagraph.axons[uid] for uid in miner_uids],
-        # Construct a dummy query. This simply contains a single integer.
-        synapse=Dummy(dummy_input=self.step),
+        synapse=task,
+        timeout=self.config.neuron.timeout,
         # All responses have the deserialize function called on them before returning.
         # You are encouraged to define your own deserialization function.
         deserialize=True,
     )
-
-    # Log the results for monitoring purposes.
-    bt.logging.info(f"Received responses: {responses}")
-
-    # TODO(developer): Define how the validator scores responses.
-    # Adjust the scores based on responses from miners.
-    rewards = get_rewards(self, query=self.step, responses=responses)
-
-    bt.logging.info(f"Scored responses: {rewards}")
-    # Update the scores based on the rewards. You may want to define your own update_scores function for custom behavior.
-    self.update_scores(rewards, miner_uids)
+    end_time = time.time()
+    Tt = end_time - start_time
+    miner_rewards = get_rewards(self, ground_truth.get("checkboxes", []), responses, Tt)
+    self.update_scores(miner_rewards, miner_uids)
     time.sleep(5)

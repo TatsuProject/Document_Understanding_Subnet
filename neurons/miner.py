@@ -21,11 +21,22 @@ import time
 import typing
 import bittensor as bt
 
+import sys
+import os
+
+# Add the parent directory to the system path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Bittensor Miner Template:
 import template
 
 # import base miner class which takes care of most of the boilerplate
 from template.base.miner import BaseMinerNeuron
+
+import base64
+from ocr import ocr_image_with_custom_line_detection
+from postprocessor import YoloCheckboxDetector
+import requests
+import logging
 
 
 class Miner(BaseMinerNeuron):
@@ -42,9 +53,39 @@ class Miner(BaseMinerNeuron):
 
         # TODO(developer): Anything specific to your use case you can do here
 
+    # Helper functions for the miner's logic
+    def get_yolo_response(self, img_path, request_id):
+        # with open(img_path, "rb") as image_file:
+        #     encoded_string = base64.b64encode(image_file.read()).decode()
+
+        # Prepare the request payload
+        payload = {'image': img_path, "request_id": request_id}
+        try:
+            response = requests.post('http://127.0.0.1:5000/predict', json=payload)
+            print(f"Status Code: {response.status_code}")
+            predictions = response.json().get("predictions", [])
+            print(f"Response: {predictions}")
+            return predictions
+        except Exception as e:
+            print(f"Request failed: {e}")
+            import traceback
+            logging.error(traceback.format_exc())
+            return []
+
+    def get_ocr_response(self, img_path):
+        ocr_data = ocr_image_with_custom_line_detection(img_path)
+        return ocr_data
+
+    def postprocess(self, binary_image, request_id):
+        ocr_data = self.get_ocr_response(binary_image)
+        yolo_resp = self.get_yolo_response(binary_image, request_id)
+        postprocessor_object = YoloCheckboxDetector()
+        checkboxes = postprocessor_object.get_selected_checkboxes_with_text(yolo_resp, ocr_data, request_id)
+        return checkboxes
+
     async def forward(
-        self, synapse: template.protocol.Dummy
-    ) -> template.protocol.Dummy:
+        self, synapse: template.protocol.ProfileSynapse
+    ) -> template.protocol.ProfileSynapse:
         """
         Processes the incoming 'Dummy' synapse by performing a predefined operation on the input data.
         This method should be replaced with actual logic relevant to the miner's purpose.
@@ -59,11 +100,14 @@ class Miner(BaseMinerNeuron):
         the miner's intended operation. This method demonstrates a basic transformation of input data.
         """
         # TODO(developer): Replace with actual implementation logic.
-        synapse.dummy_output = synapse.dummy_input * 2
+        bt.logging.info(f"############## synapse recieved ############")
+        time.sleep(10)
+        checkbox_result = self.postprocess(synapse.img_path, synapse.task_id)
+        synapse.checkbox_output = checkbox_result
         return synapse
 
     async def blacklist(
-        self, synapse: template.protocol.Dummy
+        self, synapse: template.protocol.ProfileSynapse
     ) -> typing.Tuple[bool, str]:
         """
         Determines whether an incoming request should be blacklisted and thus ignored. Your implementation should
@@ -124,7 +168,7 @@ class Miner(BaseMinerNeuron):
         )
         return False, "Hotkey recognized!"
 
-    async def priority(self, synapse: template.protocol.Dummy) -> float:
+    async def priority(self, synapse: template.protocol.ProfileSynapse) -> float:
         """
         The priority function determines the order in which requests are handled. More valuable or higher-priority
         requests are processed before others. You should design your own priority mechanism with care.

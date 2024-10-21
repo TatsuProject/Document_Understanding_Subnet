@@ -19,6 +19,8 @@
 
 import typing
 import bittensor as bt
+import pydantic
+from typing import List
 
 # TODO(developer): Rewrite with your protocol definition.
 
@@ -74,3 +76,116 @@ class Dummy(bt.Synapse):
         5
         """
         return self.dummy_output
+
+
+
+class ProfileSynapse(bt.Synapse):
+    """
+    The ProfileSynapse subclass of the Synapse class encapsulates the functionalities related to Identification Scenarios.
+
+    It specifies seven fields - `id`, `label`, `type`, `options`, `value`, `image`, `answer` - that define the state of the ProfileSynapse object.
+    All of the fields except `answer` are read-only fields defined during object initialization, and `answer` is a mutable
+    field that can be updated as the scenario progresses.
+
+    The Config inner class specifies that assignment validation should occur on this class (validate_assignment = True),
+    meaning value assignments to the instance fields are checked against their defined types for correctness.
+
+    Attributes:
+        id (str): A unique identifier for the task. This field is both mandatory and immutable.
+        type (str): A string that specifies the type of the task. This field is both mandatory and immutable and can take values "Generated" and "User" only.
+        img_path (str): a string that is actually a path to image
+        score (float): A string that captures the score to the profile. This field is mutable.
+
+
+    Methods:
+        deserialize() -> "ProfileSynapse": Returns the instance of the current object.
+
+
+    The `ProfileSynapse` class also overrides the `deserialize` method, returning the
+    instance itself when this method is invoked. Additionally, it provides a `Config`
+    inner class that enforces the validation of assignments (`validate_assignment = True`).
+    """
+    task_id: str
+    task_type: str
+    img_path: str
+    checkbox_output: list
+    score: float
+    class Config:
+        """
+        Pydantic model configuration class for ProfileSynapse. This class sets validation of attribute assignment as True.
+        validate_assignment set to True means the pydantic model will validate attribute assignments on the class.
+        """
+
+        validate_assignment = True
+        arbitrary_types_allowed=True
+
+    def deserialize(self) -> "ProfileSynapse":
+        """
+        Returns the instance of the current ProfileSynapse object.
+
+        This method is intended to be potentially overridden by subclasses for custom deserialization logic.
+        In the context of the ProfileSynapse class, it simply returns the instance itself. However, for subclasses
+        inheriting from this class, it might give a custom implementation for deserialization if need be.
+
+        Returns:
+            ProfileSynapse: The current instance of the ProfileSynapse class.
+        """
+        return self
+
+    task_id: str = pydantic.Field(
+        ...,
+        title="ID",
+        description="A unique identifier for the task.",
+        allow_mutation=False,
+    )
+
+    task_type: str = pydantic.Field(
+        ...,
+        title="Type",
+        description="A string that specifies the type of the task.",
+        allow_mutation=False,
+    )
+
+    img_path: str = pydantic.Field(
+        ...,
+        title="img_path",
+        description="Base64-encoded image data",
+        allow_mutation=False,
+    )
+
+    checkbox_output: list = pydantic.Field(
+        ...,
+        title="checkbox_output",
+        description="this is output",
+        allow_mutation=True,
+    )
+
+    score: float = pydantic.Field(
+        "",
+        title="score",
+        description="A string that captures the score to the profile.",
+        allow_mutation=True,
+    )
+
+    required_hash_fields: List[str] = pydantic.Field(
+        ["task_id", "task_type", "img_path"],
+        title="Required Hash Fields",
+        description="A list of fields that are required for the hash.",
+        allow_mutation=False,
+    )
+
+    def __str__(self) -> str:
+        """
+        Returns a string representation of the ProfileSynapse object.
+
+        Returns:
+            str: A string representation of the ProfileSynapse object.
+        """
+        return f"ProfileSynapse(id={self.task_id}, img_path={self.img_path}, score={self.score})"
+
+    def to_dict(self):
+        return {
+            "id": self.task_id,
+            "img_path": self.img_path,
+            "score": self.score,
+        }

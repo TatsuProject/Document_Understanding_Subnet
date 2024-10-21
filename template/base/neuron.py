@@ -65,6 +65,8 @@ class BaseNeuron(ABC):
         self.config.merge(base_config)
         self.check_config(self.config)
 
+        # self.config.wallet.path = "" # set your wallet path here 
+
         # Set up logging with the provided configuration.
         bt.logging.set_config(config=self.config.logging)
 
