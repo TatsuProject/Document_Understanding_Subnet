@@ -160,13 +160,6 @@ class ProfileSynapse(bt.Synapse):
         allow_mutation=True,
     )
 
-    score: float = pydantic.Field(
-        "",
-        title="score",
-        description="A string that captures the score to the profile.",
-        allow_mutation=True,
-    )
-
     required_hash_fields: List[str] = pydantic.Field(
         ["task_id", "task_type", "img_path"],
         title="Required Hash Fields",
@@ -181,11 +174,10 @@ class ProfileSynapse(bt.Synapse):
         Returns:
             str: A string representation of the ProfileSynapse object.
         """
-        return f"ProfileSynapse(id={self.task_id}, img_path={self.img_path}, score={self.score})"
+        return f"ProfileSynapse(id={self.task_id}, img_path={self.img_path}"
 
     def to_dict(self):
         return {
             "id": self.task_id,
             "img_path": self.img_path,
-            "score": self.score,
         }

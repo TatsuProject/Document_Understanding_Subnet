@@ -108,13 +108,13 @@ async def forward(self):
     # get_random_uids is an example method, but you can replace it with your own.
     ground_truth, task = get_random_image_path()
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-    # synapse.img = img_path
+    print("************ miner uids: ", miner_uids)
     start_time = time.time()
     responses = await self.dendrite(
         # Send the query to selected miner axons in the network.
         axons=[self.metagraph.axons[uid] for uid in miner_uids],
         synapse=task,
-        timeout=self.config.neuron.timeout,
+        timeout=60,
         # All responses have the deserialize function called on them before returning.
         # You are encouraged to define your own deserialization function.
         deserialize=True,
