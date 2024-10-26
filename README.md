@@ -61,10 +61,17 @@ To set up the Document Understanding project:
    pip install -e .
    ```
 
-3. **Install Tesseract (miners only):**
+3. **Install Tesseract (for miners only):**
    ```bash
    sudo apt-get install tesseract-ocr
    ```
+
+4. **Install the YOLO Checkbox Service (for miners only):**  
+   Follow the steps in the link below to install the service:  
+   ```bash
+   https://github.com/TatsuProject/yolo_checkbox_detector
+   ```
+   After installation, ensure the service is running on the same machine as the miner.
 
 ## ▶️ Usage
 
