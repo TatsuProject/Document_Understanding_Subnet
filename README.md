@@ -51,8 +51,8 @@ To set up the Document Understanding project:
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/TatsuProject/Identity-Subnet.git
-   cd Identity-Subnet
+   git clone https://github.com/TatsuProject/Document_Understanding_Subnet.git
+   cd Document_Understanding_Subnet
    ```
 
 2. **Install required dependencies:**
