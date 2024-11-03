@@ -3,7 +3,7 @@
 
 The **Document Understanding Subnet** is a pioneering, decentralized system dedicated to advanced document understanding tasks, designed to streamline document processing. Leveraging a multi-model architecture of vision, text models, and OCR engines, it aims to set a new standard in document comprehension while providing an open and accessible alternative to proprietary solutions.
 
-### 🚀 Key Capabilities in Development:
+### Key Capabilities in Development:
 1. **Checkbox and Associated Text Detection** - Currently live and operational on testnet 236, outperforming industry standards like GPT-4 Vision and Azure Form Recognizer.
 2. **Highlighted and Encircled Text Detection** - Detects and extracts highlighted or circled text segments accurately.
 3. **Document Classification** - Automatically identifies document types (e.g., receipts, forms, letters).
