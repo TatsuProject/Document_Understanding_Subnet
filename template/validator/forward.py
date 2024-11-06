@@ -68,15 +68,15 @@ def get_random_image_path():
                     # JSON label in dictionary format
                     json_label = label_data  # Already a dictionary
 
-                    print(f"Successfully retrieved image and label.")
+                    bt.logging.info(f"Successfully retrieved image and label.")
                 else:
-                    print("Error: Could not retrieve image URL or label data.")
+                    bt.logging.info("Error: Could not retrieve image URL or label data.")
                     return None, None
             else:
-                print("Error: 'data' field is missing in the response.")
+                bt.logging.info("Error: 'data' field is missing in the response.")
                 return None, None
         else:
-            print("Error: The request status is False.")
+            bt.logging.info("Error: The request status is False.")
             return None, None
     else:
         print(f"Failed to retrieve data. Status code: {response.status_code}")
@@ -108,7 +108,7 @@ async def forward(self):
     # get_random_uids is an example method, but you can replace it with your own.
     ground_truth, task = get_random_image_path()
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-    print("************ miner uids: ", miner_uids)
+    bt.logging.info(f"************ miner uids: {miner_uids}")
     start_time = time.time()
     responses = await self.dendrite(
         # Send the query to selected miner axons in the network.

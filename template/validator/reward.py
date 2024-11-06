@@ -142,12 +142,12 @@ def reward(ground_truth: list, response: ProfileSynapse, Tt: float) -> float:
     """
     checkboxes_detected = response.checkbox_output
 
-    print("********CD******")
-    print(checkboxes_detected)
-    print("**************")
-    print("*******GT*******")
-    print(ground_truth)
-    print("**************")
+    bt.logging.info(f"*************** Detected Checkbox-Text:")
+    bt.logging.info(checkboxes_detected)
+    bt.logging.info("************** End")
+    bt.logging.info(f"*************** Ground Truth:")
+    bt.logging.info(ground_truth)
+    bt.logging.info("************** End")
     tim_score = time_score_calculation(Tt)
     acc_score = accuracy_score_calculation(checkboxes_detected, ground_truth)
     # score = final_score_calculation(tim_score, acc_score)

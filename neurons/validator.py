@@ -32,6 +32,8 @@ import os
 from template.base.validator import BaseValidatorNeuron
 # Bittensor Validator Template:
 from template.validator import forward
+from logging.handlers import TimedRotatingFileHandler
+import logging
 
 
 class Validator(BaseValidatorNeuron):
@@ -45,6 +47,15 @@ class Validator(BaseValidatorNeuron):
 
     def __init__(self, config=None):
         super(Validator, self).__init__(config=config)
+        # Set up rotating log file for bt.logging
+        log_handler = TimedRotatingFileHandler("./logs/validator_logs_24h.log", when="midnight", interval=1, backupCount=7)
+        log_handler.setLevel(logging.INFO)
+        log_formatter = bt.logging.formatter if hasattr(bt.logging, 'formatter') else logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        log_handler.setFormatter(log_formatter)
+
+        # Add the handler to bittensor logger
+        root_logger = logging.getLogger()  # Get the root logger instance
+        root_logger.addHandler(log_handler)
 
         bt.logging.info("load_state()")
         self.load_state()
