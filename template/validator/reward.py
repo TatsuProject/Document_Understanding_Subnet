@@ -150,7 +150,8 @@ def reward(ground_truth: list, response: ProfileSynapse, Tt: float) -> float:
     print("**************")
     tim_score = time_score_calculation(Tt)
     acc_score = accuracy_score_calculation(checkboxes_detected, ground_truth)
-    score = final_score_calculation(tim_score, acc_score)
+    # score = final_score_calculation(tim_score, acc_score)
+    score = acc_score
     return score
 
 
