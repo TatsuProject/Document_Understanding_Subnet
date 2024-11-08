@@ -163,3 +163,9 @@ testing/
 
 # Editors
 .vscode/settings.json
+
+# Ignore all contents of the logs folder
+logs/*
+
+# Exclude the logs folder itself from being ignored
+!logs/.keep
