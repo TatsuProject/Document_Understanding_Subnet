@@ -108,7 +108,7 @@ async def forward(self):
     # get_random_uids is an example method, but you can replace it with your own.
     ground_truth, task = get_random_image_path()
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-    bt.logging.info(f"************ miner uids: {miner_uids}")
+    bt.logging.info(f"************ available uids: {miner_uids}")
     start_time = time.time()
     responses = await self.dendrite(
         # Send the query to selected miner axons in the network.
