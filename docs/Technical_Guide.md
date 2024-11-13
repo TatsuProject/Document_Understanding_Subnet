@@ -87,7 +87,7 @@
    ## OR
 
     ```bash
-    btcli subnet register --netuid  --subtensor.network finney --wallet.name miner --wallet.hotkey default
+    btcli subnet register --netuid 54 --subtensor.network finney --wallet.name miner --wallet.hotkey default
     ```
 
 
@@ -105,13 +105,10 @@
     Register your validator key to the subnet on **MAINNET**:
 
     ```bash
-    btcli subnet register --netuid --subtensor.network finney --wallet.name validator --wallet.hotkey default
+    btcli subnet register --netuid 54 --subtensor.network finney --wallet.name validator --wallet.hotkey default
     ```
 
-    Follow the prompts:
 
-
-8. **Run the Process:**
 
     ## Note
     ### Wallets
