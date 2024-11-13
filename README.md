@@ -1,5 +1,5 @@
 
-# Document Understanding Subnet - SN-54
+# Document Understanding - SN 54
 
 The **Document Understanding Subnet** is a pioneering, decentralized system dedicated to advanced document understanding tasks, designed to streamline document processing. Leveraging a multi-model architecture of vision, text models, and OCR engines, it aims to set a new standard in document comprehension while providing an open and accessible alternative to proprietary solutions.
 
