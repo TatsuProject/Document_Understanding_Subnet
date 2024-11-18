@@ -35,56 +35,17 @@ import requests
 import base64
 import sys
 import os
+from data_generation.checkboxes.generate_checkbox_text_pair import GenerateCheckboxTextPair
+from io import BytesIO
 
-
-def get_random_image_path():
-    url = 'http://3.21.227.102:3000/api/tatsu/random'
-    
-    # Send a GET request to the API
-    response = requests.get(url)
-    
-    # Check if the request was successful
-    if response.status_code == 200:
-        # Parse the response JSON
-        response_data = response.json()
-        
-        if response_data.get('status') is True:
-            # Access the 'data' section which contains image and labels
-            data = response_data.get('data')
-            
-            if data:
-                image_url = data.get('image_url')
-                label_data = data.get('data')  # Label information inside 'data' key
-                
-                if image_url and label_data:
-                    # Get the image file name from the URL
-                    image_name = os.path.basename(image_url)
-                    
-                    # Fetch the image (binary format)
-                    image_response = requests.get(image_url)
-                    if image_response.status_code == 200:
-                        image = image_response.content  # Image in binary format
-                        
-                    # JSON label in dictionary format
-                    json_label = label_data  # Already a dictionary
-
-                    bt.logging.info(f"Successfully retrieved image and label.")
-                else:
-                    bt.logging.info("Error: Could not retrieve image URL or label data.")
-                    return None, None
-            else:
-                bt.logging.info("Error: 'data' field is missing in the response.")
-                return None, None
-        else:
-            bt.logging.info("Error: The request status is False.")
-            return None, None
-    else:
-        print(f"Failed to retrieve data. Status code: {response.status_code}")
-        return None, None
-
-    # Generate a UUID for the task
+def get_random_image():
     _id = str(uuid.uuid4())
-    image_base64 = base64.b64encode(image).decode('utf-8')
+    checkbox_data_generator_object = GenerateCheckboxTextPair("", _id)
+    json_label, image = checkbox_data_generator_object.draw_checkbox_text_pairs()
+    buffer = BytesIO()          # Create an in-memory bytes buffer
+    image.save(buffer, format="PNG")  # Save the image to the buffer in PNG format
+    binary_image = buffer.getvalue()  # Get the binary content of the image
+    image_base64 = base64.b64encode(binary_image).decode('utf-8')
 
     return json_label, ProfileSynapse(
         task_id=_id,
@@ -106,7 +67,7 @@ async def forward(self):
     """
     # TODO(developer): Define how the validator selects a miner to query, how often, etc.
     # get_random_uids is an example method, but you can replace it with your own.
-    ground_truth, task = get_random_image_path()
+    ground_truth, task = get_random_image()
     miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
     bt.logging.info(f"************ available uids: {miner_uids}")
     start_time = time.time()
