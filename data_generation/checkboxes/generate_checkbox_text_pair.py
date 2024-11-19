@@ -171,7 +171,7 @@ class GenerateCheckboxTextPair:
                 draw.line((x + random.randint(-2, 2), y + random.randint(-2, 2), x + checkbox_size + random.randint(-2, 2), y + checkbox_size + random.randint(-2, 2)), fill=checkbox_color, width=2)
                 draw.line((x + checkbox_size + random.randint(-2, 2), y + random.randint(-2, 2), x + random.randint(-2, 2), y + checkbox_size + random.randint(-2, 2)), fill=checkbox_color, width=2)
 
-    def put_text_randomly(self, draw, x, y, checkbox_size, text, font, text_color, width, height):
+    def put_text_randomly(self, draw, x, y, checkbox_size, text, font, text_color, width, height, padding):
         """
         Draws the given text randomly at either the right or bottom of the checkbox.
         Ensures that the text fits within the image bounds.
@@ -179,12 +179,13 @@ class GenerateCheckboxTextPair:
         # Randomly choose whether to place text to the right or at the bottom
         choice = random.choice(["right", "bottom"])
 
-        padding = 10  # Space between checkbox and text
+        # padding = 10  # Space between checkbox and text
 
         if choice == "right":
             # Place text to the right of the checkbox
             text_x, text_y = x + checkbox_size + padding, y + 5
-            text_width, text_height = draw.textsize(text, font=font)
+            text_bbox = draw.textbbox((0, 0), text, font=font)  # Get the bounding box of the text
+            text_width, text_height = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
 
             # Ensure text fits within image bounds
             if text_x + text_width > width:
@@ -196,8 +197,9 @@ class GenerateCheckboxTextPair:
 
         elif choice == "bottom":
             # Place text below the checkbox
-            text_x, text_y = x + checkbox_size // 2 - draw.textsize(text, font=font)[0] // 2, y + checkbox_size + padding
-            text_width, text_height = draw.textsize(text, font=font)
+            text_bbox = draw.textbbox((0, 0), text, font=font)
+            text_width, text_height = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
+            text_x, text_y = x + checkbox_size // 2 - text_width // 2, y + checkbox_size + padding
 
             # Ensure text fits within image bounds
             if text_x + text_width > width:
@@ -257,7 +259,7 @@ class GenerateCheckboxTextPair:
                     # Draw tick or cross within the checkbox
                     self.draw_random_checkbox(draw, x, y, checkbox_size, checkbox_color)
 
-                    text_x, text_y, text_width, text_height = self.put_text_randomly(draw, x, y, checkbox_size, text, font, text_color, width, height)
+                    text_x, text_y, text_width, text_height = self.put_text_randomly(draw, x, y, checkbox_size, text, font, text_color, width, height, metadata.get("padding", 10))
 
                     # Save annotation in JSON format
                     json_data["checkboxes"].append(

@@ -25,7 +25,7 @@ import sys
 import os
 
 # Add the parent directory to the system path
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Bittensor Miner Template:
 import template
 
