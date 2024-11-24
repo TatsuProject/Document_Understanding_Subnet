@@ -101,8 +101,8 @@ class GenerateCheckboxTextPair:
         """Find an empty region in the image by moving a search window with defined strides."""
         width, height = image.size
         # starting_points = [(0, 0), (50, 50), (100, 1000), (0, 500), (100, 500), (150, 500), (200, 500)]
-        starting_points = [(0, 0)]
-    
+        starting_points = (0, 0)
+        start_x, start_y = starting_points
         # Ensure starting point is within image bounds
         start_x = min(start_x, width - window_width)
         start_y = min(start_y, height - window_height)
