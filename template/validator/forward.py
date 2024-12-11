@@ -39,56 +39,115 @@ import json
 from PIL import Image, ImageDraw, ImageFont
 from math import floor
 import io
+import numpy as np
+import cv2
+from faker import Faker
+
+fake = Faker()
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 class GenerateCheckboxTextPair:
     def __init__(self, url, uid):
-        self.url = "http://3.21.227.102:3000/api/tatsu/random-part-two"
+        self.url = ""
         self.uid = uid
-        
-    def get_random_image_path(self, timeout=10):
 
+    def generate_scanned_document(self):
+        """
+        Generates a synthetic scanned document image with random text, noise, and scanned effects.
+
+        Returns:
+            PIL.Image.Image: The final scanned document image in RGB format.
+        """
         try:
-            # Send a GET request to the API with timeout
-            response = requests.get(self.url, timeout=timeout)
+            # Step 1: Create a blank image with random size
+            sizes = [
+                (1200, 900), (1500, 1000), (1300, 950), (1800, 1200),
+                (1600, 1100), (1400, 1050), (1700, 1150), (1900, 1250),
+                (1450, 950), (1550, 1020), (1650, 1080), (1850, 1220),
+                (900, 1200), (1000, 1500), (950, 1300), (1200, 1800),
+                (1100, 1600), (1050, 1400), (1150, 1700), (1250, 1900),
+                (950, 1450), (1020, 1550), (1080, 1650), (1220, 1850)
+            ]
+
+            width, height = random.choice(sizes)
+            image = Image.new("RGB", (width, height), "white")
+            draw = ImageDraw.Draw(image)
+
+            # Step 2: Generate paragraphs using Faker
+            paragraphs = [fake.text(max_nb_chars=170) for _ in range(7)]  # Generate 7 random paragraphs
+
+            # Step 3: Add text to random locations
+            text_size = random.choice([22, 24, 26, 28])
             
-            # Check if the request was successful
-            if response.status_code == 200:
-                # Parse the response JSON
-                response_data = response.json()
-                if response_data.get('status') is True:
-                    # Access the 'data' section which contains image and labels
-                    data = response_data.get('data')
-                    if data:
-                        image_url = data.get('image_url')
-                        if image_url:
-                            # Fetch the image (binary format) with timeout
-                            image_response = requests.get(image_url, timeout=timeout)
-                            if image_response.status_code == 200:
-                                bt.logging.info(f"[{self.uid}] Image received successfully!")
-                                image = image_response.content  # Image in binary format
-                                # Open the binary data as a PIL Image
-                                return Image.open(io.BytesIO(image)).convert("RGB")
-                            bt.logging.info(f"[{self.uid}] Successfully retrieved image and label.")
-                        else:
-                            bt.logging.info(f"[{self.uid}] Error: Could not retrieve image URL or label data.")
-                            return None
-                    else:
-                        bt.logging.info(f"[{self.uid}] Error: 'data' field is missing in the response.")
-                        return None
-                else:
-                    bt.logging.info(f"[{self.uid}] Error: The request status is False.")
-                    return None
-            else:
-                bt.logging.info(f"[{self.uid}] Failed to retrieve data. Status code: {response.status_code}")
+            try:
+                font = random.choice([
+                    ImageFont.truetype(os.path.join(script_dir, "fonts/Arial.ttf"), text_size),
+                    ImageFont.truetype(os.path.join(script_dir, "fonts/Arial_Bold_Italic.ttf"), text_size),
+                    ImageFont.truetype(os.path.join(script_dir, "fonts/Courier_New.ttf"), text_size),
+                    ImageFont.truetype(os.path.join(script_dir, "fonts/DroidSans-Bold.ttf"), text_size),
+                    ImageFont.truetype(os.path.join(script_dir, "fonts/FiraMono-Regular.ttf"), text_size),
+                    ImageFont.truetype(os.path.join(script_dir, "fonts/Times New Roman.ttf"), text_size),
+                    ImageFont.truetype(os.path.join(script_dir, "fonts/Vera.ttf"), text_size),
+                    ImageFont.truetype(os.path.join(script_dir, "fonts/Verdana_Bold_Italic.ttf"), text_size),
+                    ImageFont.truetype(os.path.join(script_dir, "fonts/Verdana.ttf"), text_size),
+                    ImageFont.truetype(os.path.join(script_dir, "fonts/DejaVuSansMono-Bold.ttf"), text_size)
+                ])
+            except IOError:
+                font = ImageFont.load_default()  # Default font
+            
+            used_centre = []
+            total_retries = 100
+            retried = 0
+            for _ in range(7):
+                text = random.choice(paragraphs)
+
+                while retried <= total_retries:  # Keep generating positions until a valid one is found
+                    retried += 1
+                    x = random.randint(10, width - 700)  # Avoid edges
+                    y = random.randint(10, height - 200)  # Avoid bottom edge
+
+                    # Check if y is not within ±40 of any used y
+                    if all(abs(y - prev_y) > 40 for _, prev_y in used_centre):
+                        used_centre.append((x, y))
+                        break
+
+                draw.text((x, y), text, fill="black", font=font)
+
+            # Step 4: Convert PIL image to OpenCV format
+            img_array = np.array(image)
+            img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+
+            # Step 5: Add scanned effects using OpenCV
+            try:
+                # a. Add Gaussian blur
+                img_blur = cv2.GaussianBlur(img_array, (1, 1), 0)  # Reduced blur kernel size
+
+                # b. Rotate image slightly for scanned effect
+                angle = random.uniform(-2, 2)  # Small rotation angle
+                center = (width // 2, height // 2)
+                rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+                img_rotated = cv2.warpAffine(img_blur, rotation_matrix, (width, height), borderValue=(255, 255, 255))
+
+                # c. Add noise (reduced intensity)
+                noise = np.random.normal(0, 3, img_rotated.shape).astype("uint8")  # Reduced standard deviation
+                img_noisy = cv2.add(img_rotated, noise)
+
+                # d. Add brightness or contrast variation
+                alpha = random.uniform(0.95, 1.05)  # Slight contrast control
+                beta = random.randint(-5, 5)        # Subtle brightness control
+                img_final = cv2.convertScaleAbs(img_noisy, alpha=alpha, beta=beta)
+            except Exception as e:
+                bt.logging.error(f"[generate_scanned_document] OpenCV effects generation failed: {e}")
                 return None
 
-        except requests.exceptions.Timeout:
-            bt.logging;error(f"[{self.uid}] Request timed out after {timeout} seconds.")
-            return None
-        except requests.exceptions.RequestException as e:
-            bt.logging;error(f"[{self.uid}] An error occurred: {e}")
+            # Step 6: Convert back to PIL and save/show
+            final_image = Image.fromarray(cv2.cvtColor(img_final, cv2.COLOR_BGR2RGB))
+            bt.logging.info(f"[{self.uid}] Document Generated Successfully!")
+            return final_image
+
+        except Exception as e:
+            bt.logging.error(f"[generate_scanned_document] An error occurred: {e}")
             return None
 
     def is_window_empty(self, window, threshold=240, empty_percentage=0.9999):
@@ -246,7 +305,7 @@ class GenerateCheckboxTextPair:
         
         while total_checkboxes_drawn == 0 and max_attempts > 0:
             # Fetch a random image
-            image = self.get_random_image_path()
+            image = self.generate_scanned_document()
             metadata = self.get_random_metadata()
             font = metadata.get("font", ImageFont.load_default())
             number_of_pairs = random.choice([1, 2, 3])
