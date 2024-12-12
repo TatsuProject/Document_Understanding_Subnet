@@ -282,6 +282,11 @@ class GenerateCheckboxTextPair:
             if text_y + text_height > height:
                 text_y = height - text_height - 1
 
+            if text_x < 0:
+                text_x = 1
+            if text_y < 0:
+                text_y = 1
+
             draw.text((text_x, text_y), text, fill=text_color, font=font)
 
         elif choice == "bottom":
@@ -296,8 +301,21 @@ class GenerateCheckboxTextPair:
             if text_y + text_height > height:
                 text_y = height - text_height - 1
 
+            if text_x < 0:
+                text_x = 1
+            if text_y < 0:
+                text_y = 1
+
             draw.text((text_x, text_y), text, fill=text_color, font=font)
         return text_x, text_y, text_width, text_height
+
+    def generate_random_words(self):
+        # Randomly choose the number of words between 2 and 4
+        num_words = random.randint(2, 4)
+        # Generate the words
+        words = [fake.word() for _ in range(num_words)]
+        # Join the words into a single string
+        return " ".join(words)
 
     def draw_checkbox_text_pairs(self):
         total_checkboxes_drawn = 0
@@ -323,7 +341,7 @@ class GenerateCheckboxTextPair:
                 for _ in range(number_of_pairs):
                     # Find an empty region in the image
                     x, y = self.find_empty_region(image, window_width, window_height)
-                    if x is None or y is None:
+                    if x is None and y is None:
                         break
 
                     # Define checkbox size and color
@@ -331,14 +349,7 @@ class GenerateCheckboxTextPair:
                     checkbox_color = metadata.get("text_color", (60, 60, 60))
                     text_color = metadata.get("text_color", (60, 60, 60))
 
-                    text_options = [
-                        "profit margin",
-                        "clinical trial",
-                    ]
-                    with open(os.path.join(script_dir, "random_words.txt"), "r") as file:
-                        text_options = [line.strip() for line in file]
-
-                    text = random.choice(text_options)
+                    text = self.generate_random_words()
 
                     # Draw checkbox
                     checkbox_coords = [x, y, x + checkbox_size, y + checkbox_size]
