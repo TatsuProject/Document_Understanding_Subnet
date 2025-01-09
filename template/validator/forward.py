@@ -32,6 +32,7 @@ import sys
 import os
 from io import BytesIO
 
+from .redis_utils import get_next_task_from_queue, store_results_in_s3, delete_task_by_request_id
 
 # ================================================== data generation ==============================================================
 import random
@@ -398,10 +399,32 @@ def get_random_image():
     binary_image = buffer.getvalue()  # Get the binary content of the image
     image_base64 = base64.b64encode(binary_image).decode('utf-8')
 
-    return json_label, ProfileSynapse(
+    return "synthetic", json_label, ProfileSynapse(
         task_id=_id,
-        task_type="got from api",
+        task_type="synthetic",
         img_path=image_base64,  # Image in binary format
+        checkbox_output=[],  # This would be updated later
+        score=0  # The score will be calculated by the miner
+    )
+
+def get_task_from_redis():
+    """
+    Validator function that processes tasks from the queue.
+    """
+
+    # Get the next task from the queue
+    task = get_next_task_from_queue()
+    
+    if not task:
+        bt.logging.info(f"No tasks in the queue..")
+        return "", {}, None
+
+    bt.logging.info(f"Task found in the queue.")
+
+    return "redis", {}, ProfileSynapse(
+        task_id=task["request_id"],
+        task_type="redis",
+        img_path=task["image_data"],  # Image in binary format
         checkbox_output=[],  # This would be updated later
         score=0  # The score will be calculated by the miner
     )
@@ -418,9 +441,18 @@ async def forward(self):
     """
     # TODO(developer): Define how the validator selects a miner to query, how often, etc.
     # get_random_uids is an example method, but you can replace it with your own.
-    ground_truth, task = get_random_image()
-    miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-    bt.logging.info(f"************ available uids: {miner_uids}")
+    task_type, ground_truth, task = get_task_from_redis()
+    if not task:
+        task_type, ground_truth, task = get_random_image()
+
+    if task_type == "redis":
+        random_uids = get_random_uids(self, k=self.config.neuron.sample_size)
+        miner_uids = random.choice(random_uids)
+        bt.logging.info(f"************ selected_uid: {miner_uids}")
+    else:
+        miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
+        bt.logging.info(f"************ available uids: {miner_uids}")
+
     start_time = time.time()
     responses = await self.dendrite(
         # Send the query to selected miner axons in the network.
@@ -433,6 +465,18 @@ async def forward(self):
     )
     end_time = time.time()
     Tt = end_time - start_time
-    miner_rewards = get_rewards(self, ground_truth.get("checkboxes", []), responses, Tt)
+    if task_type == "redis":
+        miner_rewards = np.array([0.2])
+        if responses[0]:
+            checkboxes_detected = responses[0].checkbox_output
+            json_file = {
+                "request_id": responses[0].task_id,
+                "status": "success",
+                "result": checkboxes_detected
+            }
+            store_results_in_s3(responses[0].task_id, json_file)
+        delete_task_by_request_id(responses[0].task_id)
+    else:
+        miner_rewards = get_rewards(self, ground_truth.get("checkboxes", []), responses, Tt)
     self.update_scores(miner_rewards, miner_uids)
     time.sleep(5)
