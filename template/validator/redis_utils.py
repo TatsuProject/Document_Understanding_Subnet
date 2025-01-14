@@ -1,14 +1,21 @@
 
-import redis
+from redis import StrictRedis
 import json
 
 import boto3
 import os
-# Redis setup
-redis_client = redis.StrictRedis(host='localhost', port=6379, db=0)
 from dotenv import load_dotenv
 import bittensor as bt
 load_dotenv()
+
+redis_password = os.getenv('REDIS_PASSWORD')  # Load from environment variable
+redis_host = os.getenv('REDIS_HOST')  # Load from environment variable
+redis_client = StrictRedis(
+    host=redis_host, 
+    port=6379, 
+    db=0, 
+    password=redis_password
+)
 
 def get_next_task_from_queue():
     """
