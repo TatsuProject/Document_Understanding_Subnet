@@ -470,9 +470,9 @@ async def forward(self):
         if responses[0]:
             checkboxes_detected = responses[0].checkbox_output
             json_file = {
-                "request_id": responses[0].task_id,
+                "task_id": responses[0].task_id,
                 "status": "success",
-                "result": checkboxes_detected
+                "response": checkboxes_detected
             }
             store_results_in_s3(responses[0].task_id, json_file)
         delete_task_by_request_id(responses[0].task_id)
