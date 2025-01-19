@@ -159,7 +159,8 @@ def get_rewards(
     self,
     ground_truth: list,
     responses: List[ProfileSynapse],
-    Tt: float
+    Tt: float,
+    redis_score: float
 ) -> np.ndarray:
     """
     Returns an array of rewards for the given query and responses.
@@ -172,6 +173,11 @@ def get_rewards(
     - np.ndarray: An array of rewards for the given query and responses.
     """
     # Get all the reward results by iteratively calling your reward() function.
-    return np.array(
-        [reward(ground_truth, each_resp, Tt) for each_resp in responses]
-    )
+    scores_array=np.zeros(len(responses))
+    for idx, each_resp in enumerate(responses):
+        if each_resp[0].task_type=="redis":
+            scores_array[idx]=redis_score
+        else:
+            scores_array[idx]=reward(ground_truth, each_resp[0], Tt)
+
+    return scores_array
