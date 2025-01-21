@@ -19,24 +19,36 @@ redis_client = StrictRedis(
 
 def get_next_task_from_queue():
     """
-    Fetch the oldest task from the Redis queue, update its status to 'processing',
-    and keep it in the FIFO list.
+    Fetch the next task from the Redis queue whose status is not 'processing',
+    update its status to 'processing', and keep it in the FIFO list.
     """
     try:
         # Check if the queue exists and has elements
-        if redis_client.llen("task_queue") > 0:
-            # Fetch the oldest task without removing it
-            oldest_task_data = redis_client.lindex("task_queue", 0)  # Get the first task
-            if oldest_task_data:
-                oldest_task = json.loads(oldest_task_data)  # Deserialize the task
-                oldest_task["status"] = "processing"  # Update the status
-
-                # Update the task back in the queue
-                redis_client.lset("task_queue", 0, json.dumps(oldest_task))
-                return oldest_task  # Return the updated task
-        return None  # Queue is empty or does not exist
+        queue_length = redis_client.llen("task_queue")
+        if queue_length > 0:
+            # Iterate through the tasks in the queue
+            for index in range(queue_length):
+                # Fetch the task at the current index
+                task_data = redis_client.lindex("task_queue", index)
+                if task_data:
+                    task = json.loads(task_data)  # Deserialize the task
+                    
+                    # Check if the task's status is not 'processing'
+                    if task.get("status") != "processing":
+                        # Update the status to 'processing'
+                        task["status"] = "processing"
+                        
+                        # Update the task back in the queue
+                        redis_client.lset("task_queue", index, json.dumps(task))
+                        return task  # Return the updated task
+            
+            # No task available with status not 'processing'
+            return None
+        else:
+            # Queue is empty
+            return None
     except Exception as e:
-        bt.logging.info(f"An error occurred while updating the oldest task: {e}")
+        bt.logging.info(f"An error occurred while fetching the next task: {e}")
         return None
 
 

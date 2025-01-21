@@ -429,82 +429,27 @@ def get_task_from_redis():
         score=0  # The score will be calculated by the miner
     )
 
-# async def forward(self):
-#     """
-#     The forward function is called by the validator every time step.
-
-#     It is responsible for querying the network and scoring the responses.
-
-#     Args:
-#         self (:obj:`bittensor.neuron.Neuron`): The neuron object which contains all the necessary state for the validator.
-
-#     """
-#     # TODO(developer): Define how the validator selects a miner to query, how often, etc.
-#     # get_random_uids is an example method, but you can replace it with your own.
-#     task_type, ground_truth, task = get_task_from_redis()
-#     if not task:
-#         task_type, ground_truth, task = get_random_image()
-
-#     if task_type == "redis":
-#         random_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-#         miner_uids = random.choice(random_uids)
-#         bt.logging.info(f"************ selected_uid: {miner_uids}")
-#     else:
-#         miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-#         bt.logging.info(f"************ available uids: {miner_uids}")
-
-#     start_time = time.time()
-#     responses = await self.dendrite(
-#         # Send the query to selected miner axons in the network.
-#         axons=[self.metagraph.axons[uid] for uid in miner_uids],
-#         synapse=task,
-#         timeout=3600,
-#         # All responses have the deserialize function called on them before returning.
-#         # You are encouraged to define your own deserialization function.
-#         deserialize=True,
-#     )
-#     end_time = time.time()
-#     Tt = end_time - start_time
-#     if task_type == "redis":
-#         miner_rewards = np.array([0.2])
-#         if responses[0]:
-#             checkboxes_detected = responses[0].checkbox_output
-#             json_file = {
-#                 "task_id": responses[0].task_id,
-#                 "status": "success",
-#                 "response": checkboxes_detected
-#             }
-#             store_results_in_s3(responses[0].task_id, json_file)
-#         delete_task_by_request_id(responses[0].task_id)
-#     else:
-#         miner_rewards = get_rewards(self, ground_truth.get("checkboxes", []), responses, Tt)
-#     self.update_scores(miner_rewards, miner_uids)
-#     time.sleep(5)
-
-
-
 
 async def forward(self):
     """
     Enhanced forward function to split tasks between top 20% miners and the rest.
     """
     available_miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-    available_miner_uids = [0]
+    bt.logging.info(f"************ selected_uid: {available_miner_uids}")
 
-    self.miner_scores = {}
+    miner_scores = {}
     miner_uids = []
     # Maintain a record of miner scores (initialize if not already done).
     for each_uid, each_score in enumerate(list(self.scores)):
         if each_uid in available_miner_uids:
             miner_uids.append(each_uid)
-            self.miner_scores[each_uid] = each_score  # All miners start with score 0.
+            miner_scores[each_uid] = each_score  # All miners start with score 0.
 
     # Sort miners by performance and get top 20%.
-    sorted_miners = sorted(self.miner_scores.items(), key=lambda x: x[1], reverse=True)
+    sorted_miners = sorted(miner_scores.items(), key=lambda x: x[1], reverse=True)
     top_30_percent_count = max(1, int(0.3 * len(sorted_miners)))  # Ensure at least 1 miner.
     top_30_percent_miners = [uid for uid, _ in sorted_miners[:top_30_percent_count]]
     rest_miners = [uid for uid, _ in sorted_miners[top_30_percent_count:]]
-
 
     # ======================= parallel =========================================
     # Prepare task assignments
@@ -514,12 +459,26 @@ async def forward(self):
     for uid in top_30_percent_miners:
         task_type, ground_truth, task = get_task_from_redis()
         if task:
-            miner_task_map[uid] = task  # Redis task for top 20% miners
+            bt.logging.info(f"|``````````````````````````````````````````````|")
+            bt.logging.info(f"|                   uid: {uid}                     |")
+            bt.logging.info(f"|               task type: redis               |")
+            bt.logging.info(f"| task id: {task.task_id}|")
+            bt.logging.info(f"|______________________________________________|")
+            miner_task_map[uid] = task  # Redis task for top 30% miners
         else:
+            bt.logging.info(f"|``````````````````````````````````````````````|")
+            bt.logging.info(f"|                   uid: {uid}                     |")
+            bt.logging.info(f"|              task type: sythetic             |")
+            bt.logging.info(f"| task id: {synthetic_task.task_id}|")
+            bt.logging.info(f"|______________________________________________|")
             miner_task_map[uid] = synthetic_task
 
     for uid in rest_miners:
-        _, synthetic_ground_truth, synthetic_task = get_random_image()
+        bt.logging.info(f"|``````````````````````````````````````````````|")
+        bt.logging.info(f"|                   uid: {uid}                     |")
+        bt.logging.info(f"|              task type: sythetic             |")
+        bt.logging.info(f"| task id: {synthetic_task.task_id}|")
+        bt.logging.info(f"|______________________________________________|")
         miner_task_map[uid] = synthetic_task  # Synthetic task for the rest
 
     # Prepare axons and tasks
@@ -556,12 +515,6 @@ async def forward(self):
     ]
 
     responses = await asyncio.gather(*tasks)
-    # responses = await self.dendrite(
-    #     axons=axons,
-    #     synapse=tasks[0],  # Pass the tasks corresponding to each axon
-    #     timeout=3600,
-    #     deserialize=True,
-    # )
     end_time = time.time()
     Tt = end_time - start_time
     # --------------------------------------------------------------------------
@@ -569,15 +522,15 @@ async def forward(self):
     # Evaluate miners handling Redis tasks.
     avg_top_30_score = 0.2
     avg_top_30_score = np.mean(list(self.scores[uid] for uid in top_30_percent_miners))
-    if avg_top_30_score<=0.0:
-        avg_top_30_score = np.mean(list(self.miner_scores[uid] for uid in rest_miners))
-    redis_score = avg_top_30_score + (0.05*avg_top_30_score)  # give 5% bonus for redis tasks
 
+    if avg_top_30_score<=0.0:
+        avg_top_30_score = np.mean(list(miner_scores[uid] for uid in rest_miners))
+    redis_score = avg_top_30_score + (0.05*avg_top_30_score)  # give 5% bonus for redis tasks
+    
     miner_rewards = get_rewards(self, synthetic_ground_truth.get("checkboxes", []), responses, Tt, redis_score)
     self.update_scores(miner_rewards, miner_uids)
 
     for each_response in responses:
-        # self.miner_scores[uid] = redis_score  # Update scores for Redis miners.
         if each_response[0].task_type=="redis":
         # Process Redis task responses.
             checkboxes_detected = each_response[0].checkbox_output
@@ -590,5 +543,4 @@ async def forward(self):
             delete_task_by_request_id(each_response[0].task_id)
 
     # Log updated scores.
-    bt.logging.info(f"Updated miner scores: {self.miner_scores}")
     time.sleep(2)
