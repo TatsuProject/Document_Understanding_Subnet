@@ -107,8 +107,9 @@ class ProfileSynapse(bt.Synapse):
     """
     task_id: str
     task_type: str
+    task_sub_type: str
     img_path: str
-    checkbox_output: list
+    miner_output: list
     score: float
     class Config:
         """
@@ -142,7 +143,14 @@ class ProfileSynapse(bt.Synapse):
     task_type: str = pydantic.Field(
         ...,
         title="Type",
-        description="A string that specifies the type of the task.",
+        description="where this task is fetched from?",
+        allow_mutation=False,
+    )
+
+    task_sub_type: str = pydantic.Field(
+        ...,
+        title="Sub-Type",
+        description="what type of task is this?",
         allow_mutation=False,
     )
 
@@ -153,15 +161,15 @@ class ProfileSynapse(bt.Synapse):
         allow_mutation=False,
     )
 
-    checkbox_output: list = pydantic.Field(
+    miner_output: list = pydantic.Field(
         ...,
-        title="checkbox_output",
+        title="miner_output",
         description="this is output",
         allow_mutation=True,
     )
 
     required_hash_fields: List[str] = pydantic.Field(
-        ["task_id", "task_type", "img_path"],
+        ["task_id", "task_type", "task_sub_type", "img_path"],
         title="Required Hash Fields",
         description="A list of fields that are required for the hash.",
         allow_mutation=False,

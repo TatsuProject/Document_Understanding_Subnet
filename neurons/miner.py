@@ -64,17 +64,19 @@ class Miner(BaseMinerNeuron):
         root_logger.addHandler(log_handler)
 
     # Helper functions for the miner's logic
-    def get_yolo_response(self, img_path, request_id):
+    def get_model_response(self, img_path, request_id, task_sub_type):
         # with open(img_path, "rb") as image_file:
         #     encoded_string = base64.b64encode(image_file.read()).decode()
 
         # Prepare the request payload
-        payload = {'image': img_path, "request_id": request_id}
+        payload = {'image': img_path, "request_id": request_id, "task_type": task_sub_type}
         try:
             response = requests.post('http://127.0.0.1:5000/predict', json=payload)
             print(f"Status Code: {response.status_code}")
             predictions = response.json().get("predictions", [])
             print(f"Response: {predictions}")
+            if isinstance(predictions, str):
+                predictions = [predictions]
             return predictions
         except Exception as e:
             print(f"Request failed: {e}")
@@ -86,12 +88,15 @@ class Miner(BaseMinerNeuron):
         ocr_data = ocr_image_with_custom_line_detection(img_path)
         return ocr_data
 
-    def postprocess(self, binary_image, request_id):
+    def postprocess(self, binary_image, request_id, task_sub_type):
         ocr_data = self.get_ocr_response(binary_image)
-        yolo_resp = self.get_yolo_response(binary_image, request_id)
-        postprocessor_object = YoloCheckboxDetector()
-        checkboxes = postprocessor_object.get_selected_checkboxes_with_text(yolo_resp, ocr_data, request_id)
-        return checkboxes
+        model_resp = self.get_model_response(binary_image, request_id, task_sub_type)
+        if task_sub_type=="checkbox":
+            postprocessor_object = YoloCheckboxDetector()
+            checkboxes = postprocessor_object.get_selected_checkboxes_with_text(model_resp, ocr_data, request_id)
+            return checkboxes
+        elif task_sub_type=="doc-class":
+            return model_resp
 
     async def forward(
         self, synapse: template.protocol.ProfileSynapse
@@ -112,10 +117,10 @@ class Miner(BaseMinerNeuron):
         # TODO(developer): Replace with actual implementation logic.
         bt.logging.info(f"############## synapse recieved ############")
         time.sleep(10)
-        checkbox_result = self.postprocess(synapse.img_path, synapse.task_id)
-        synapse.checkbox_output = checkbox_result
+        model_result = self.postprocess(synapse.img_path, synapse.task_id, synapse.task_sub_type)
+        synapse.miner_output = model_result
         print("****************")
-        print(synapse.checkbox_output)
+        print(synapse.miner_output)
         print("****************")
         return synapse
 

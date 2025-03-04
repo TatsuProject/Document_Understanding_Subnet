@@ -23,6 +23,21 @@ from template.protocol import ProfileSynapse
 from fuzzywuzzy import fuzz
 
 
+def hard_match_strings(string1: str, string2: str, minimum_match_percentage: float) -> float:
+    # If lengths are different, it's an immediate mismatch
+    if len(string1) != len(string2):
+        return 0.0
+
+    # Count character matches
+    matches = sum(1 for c1, c2 in zip(string1, string2) if c1 == c2)
+
+    # Calculate match percentage
+    match_percentage = (matches / len(string1)) * 100 if string1 else 100.0
+
+    # Apply minimum match threshold
+    return match_percentage if match_percentage >= minimum_match_percentage else 0.0
+
+
 def time_score_calculation(time_taken, Tn=2.0):
     """
     Calculate the time score based on the time taken by the miner.
@@ -72,6 +87,9 @@ def calculate_overlap(box1, box2):
     overlap_area = (overlap_x2 - overlap_x1) * (overlap_y2 - overlap_y1)
     box1_area = (x1_max - x1_min) * (y1_max - y1_min)
     box2_area = (x2_max - x2_min) * (y2_max - y2_min)
+
+    if box1_area>=2*box1_area:
+        return 0.0
     
     return overlap_area / max(box1_area, box2_area)
 
@@ -87,11 +105,14 @@ def accuracy_score_calculation(detected_checkboxes, ground_truths):
     - float: Overall accuracy score.
     """
     scores = []
-    
+    if abs(len(detected_checkboxes) - len(ground_truths))>1:
+        return 0.0
+
     for detected in detected_checkboxes:
         detected_bbox = detected['checkbox_boundingBox']
         detected_text = detected['text']
         
+        score_for_detected_pair = 0.0
         for ground_truth in ground_truths:
             ground_truth_bbox = ground_truth['checkbox_boundingBox']
             ground_truth_text = ground_truth['text']
@@ -107,7 +128,8 @@ def accuracy_score_calculation(detected_checkboxes, ground_truths):
             
             # print("---- checkbox score: ", cbs)
             # Calculate TS (Text Similarity)
-            ts = fuzz.token_sort_ratio(detected_text, ground_truth_text)
+            # ts = fuzz.token_sort_ratio(detected_text, ground_truth_text)
+            ts = hard_match_strings(detected_text, ground_truth_text, 75.0)
             if ts >= 100:
                 ts_score = 1.0
             elif ts >= 30:
@@ -117,7 +139,9 @@ def accuracy_score_calculation(detected_checkboxes, ground_truths):
             
             # Calculate score for this pair
             score = (cbs + ts_score) / 2
-            scores.append(score)
+            if score>score_for_detected_pair:
+                score_for_detected_pair = score
+        scores.append(score_for_detected_pair)
     
     # Calculate overall accuracy score
     if scores:
@@ -140,7 +164,7 @@ def reward(ground_truth: list, response: ProfileSynapse, Tt: float) -> float:
     Returns:
     - float: The reward value for the miner.
     """
-    checkboxes_detected = response.checkbox_output
+    checkboxes_detected = response.miner_output
 
     bt.logging.info(f"*************** Detected Checkbox-Text:")
     bt.logging.info(checkboxes_detected)
@@ -152,6 +176,30 @@ def reward(ground_truth: list, response: ProfileSynapse, Tt: float) -> float:
     acc_score = accuracy_score_calculation(checkboxes_detected, ground_truth)
     # score = final_score_calculation(tim_score, acc_score)
     score = acc_score
+    return score
+
+
+def doc_class_reward(ground_truth: list, response: ProfileSynapse, Tt: float) -> float:
+    """
+    Reward the miner response to the dummy request. This method returns a reward
+    value for the miner, which is used to update the miner's score.
+
+    Returns:
+    - float: The reward value for the miner.
+    """
+    doc_class_detected = str(response.miner_output[0])
+    actual_class = ground_truth[0]
+
+    bt.logging.info(f"*************** Detected Document Class:")
+    bt.logging.info(doc_class_detected)
+    bt.logging.info("************** End")
+    bt.logging.info(f"*************** Ground Truth:")
+    bt.logging.info(actual_class)
+    bt.logging.info("************** End")
+    # tim_score = time_score_calculation(Tt)
+    acc_score = hard_match_strings(doc_class_detected, actual_class, 75.0)
+    # score = final_score_calculation(tim_score, acc_score)
+    score = acc_score/100
     return score
 
 
@@ -178,6 +226,9 @@ def get_rewards(
         if each_resp[0].task_type=="redis":
             scores_array[idx]=redis_score
         else:
-            scores_array[idx]=reward(ground_truth, each_resp[0], Tt)
+            if each_resp[0].task_sub_type=="checkbox":
+                scores_array[idx]=reward(ground_truth.get("checkboxes", []), each_resp[0], Tt)
+            elif each_resp[0].task_sub_type=="doc-class":
+                scores_array[idx]=doc_class_reward([ground_truth.get("document_class", "")], each_resp[0], Tt)
 
     return scores_array
