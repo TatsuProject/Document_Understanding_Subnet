@@ -1,5 +1,5 @@
 
-# Document Understanding - SN 54
+# Document Understanding 
 
 The **Document Understanding Subnet** is a pioneering, decentralized system dedicated to advanced document understanding tasks, designed to streamline document processing. Leveraging a multi-model architecture of vision, text models, and OCR engines, it aims to set a new standard in document comprehension while providing an open and accessible alternative to proprietary solutions.
 
@@ -10,9 +10,9 @@ The **Document Understanding Subnet** is a pioneering, decentralized system dedi
 4. **Entity Detection** - Extracts key details such as names, addresses, phone numbers, and costs.
 5. **JSON Data Structuring** - Compiles and formats extracted data into a concise, readable JSON file, significantly reducing document review time.
 
-This system will bring efficiency to document processing workflows by combining these capabilities, enabling faster, more efficient, and decentralized document analysis. Currently, checkbox and associated text detection are fully operational on SN-54, with additional features in development.
+This system will bring efficiency to document processing workflows by combining these capabilities, enabling faster, more efficient, and decentralized document analysis. Currently, checkbox and associated text detection are fully operational on Testnet, with additional features in development.
 
-*Update: Now live on mainnet as subnet-54.*
+
 
 ## Table of Contents
 
@@ -91,12 +91,12 @@ To set up the Document Understanding project:
 
 1. **Start the Validator:**
    ```bash
-   python3 neurons/validator.py --netuid 54 --subtensor.network finney --wallet.name validator --wallet.hotkey default --logging.debug 
+   python3 neurons/validator.py --netuid -- --subtensor.network finney --wallet.name validator --wallet.hotkey default --logging.debug 
    ```
 
 2. **Start the Miner:**
    ```bash
-   python3 neurons/miner.py --netuid 54 --subtensor.network finney --wallet.name miner --wallet.hotkey default --logging.debug 
+   python3 neurons/miner.py --netuid -- --subtensor.network finney --wallet.name miner --wallet.hotkey default --logging.debug 
    ```
 
 
