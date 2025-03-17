@@ -198,7 +198,7 @@ async def forward(self):
             json_file = {
                 "task_id": each_response[0].task_id,
                 "status": "success",
-                "task_type": each_resp[0].task_sub_type,
+                "task_type": each_response[0].task_sub_type,
                 "response": info_detected
             }
             store_results_in_s3(each_response[0].task_id, json_file)
