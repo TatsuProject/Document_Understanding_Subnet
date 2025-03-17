@@ -327,7 +327,8 @@ def get_rewards(
                 scores_array[idx]=doc_class_reward([ground_truth.get("document_class", "")], each_resp[0], Tt)
             elif each_resp[0].task_sub_type=="doc-parse":
                 classification_score = doc_class_reward([ground_truth.get("document_class", "")], each_resp[0], Tt)
-                parsing_score = doc_parse_reward([ground_truth.get("document_class", "")], each_resp[0], Tt)
-
+                parsing_score = doc_parse_reward([ground_truth.get("NER", "")], each_resp[0], Tt)
+                weighted_avg_score = (0.3*classification_score + 0.7*parsing_score)/2
+                scores_array[idx]=weighted_avg_score
 
     return scores_array
