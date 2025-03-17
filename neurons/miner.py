@@ -95,7 +95,7 @@ class Miner(BaseMinerNeuron):
             postprocessor_object = YoloCheckboxDetector()
             checkboxes = postprocessor_object.get_selected_checkboxes_with_text(model_resp, ocr_data, request_id)
             return checkboxes
-        elif task_sub_type=="doc-class":
+        elif task_sub_type in ["doc-class", "doc-parse"]:
             return model_resp
 
     async def forward(

@@ -41,12 +41,12 @@ def get_random_image():
     checkbox_data_generator_object = GenerateCheckboxTextPair("", _id)
     document_generator_object = GenerateDocument("", _id)
 
-    available_tasks = ["checkbox", "doc-class"]
+    available_tasks = ["checkbox", "doc-class", "doc-parse"]
 
     finalized_task = random.choice(available_tasks)
     bt.logging.info(f"########### sub task type: {finalized_task}")
 
-    if finalized_task == "doc-class":
+    if finalized_task in ["doc-class", "doc-parse"]:
         json_label, image = document_generator_object.generate_document()
     elif finalized_task == "checkbox":
         json_label, image = checkbox_data_generator_object.draw_checkbox_text_pairs()

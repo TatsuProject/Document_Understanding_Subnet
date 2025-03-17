@@ -220,7 +220,7 @@ def are_keys_same(dict1, dict2):
 def doc_parse_basic_unit_reward(detected_dict, actual_dict):
     """ Computes reward based on string match and bounding box overlap. """
     try:
-        string_score = hard_match_strings(actual_dict.get("text", ""), detected_dict.get("text", "")) / 100
+        string_score = hard_match_strings(actual_dict.get("text", ""), detected_dict.get("text", ""), 75.0) / 100
         bbox_overlapping = (
             calculate_overlap(detected_dict["bounding_box"], actual_dict["bounding_box"])
             if "bounding_box" in actual_dict and "bounding_box" in detected_dict
@@ -229,6 +229,8 @@ def doc_parse_basic_unit_reward(detected_dict, actual_dict):
         )
         return (string_score + bbox_overlapping) / 2
     except Exception as e:
+        import traceback
+        bt.logging.error(f"{traceback.format_exc()}")
         bt.logging.error(f"Error in basic unit reward calculation: {e}")
         return 0.0
 
@@ -260,6 +262,8 @@ def compute_section_score(detected_section, actual_section):
             return sum(scores) / len(scores) if scores else 0.0
 
     except Exception as e:
+        import traceback
+        bt.logging.error(f"{traceback.format_exc()}")
         bt.logging.error(f"Error in computing section score: {e}")
     return 0.0
 
@@ -294,6 +298,8 @@ def doc_parse_reward(ground_truth: list, response: ProfileSynapse, Tt: float) ->
         return score
 
     except Exception as e:
+        import traceback
+        bt.logging.error(f"{traceback.format_exc()}")
         bt.logging.error(f"Error in doc_parse_reward function: {e}")
         return 0.0
 
@@ -327,8 +333,8 @@ def get_rewards(
                 scores_array[idx]=doc_class_reward([ground_truth.get("document_class", "")], each_resp[0], Tt)
             elif each_resp[0].task_sub_type=="doc-parse":
                 classification_score = doc_class_reward([ground_truth.get("document_class", "")], each_resp[0], Tt)
-                parsing_score = doc_parse_reward([ground_truth.get("NER", "")], each_resp[0], Tt)
-                weighted_avg_score = (0.3*classification_score + 0.7*parsing_score)/2
+                parsing_score = doc_parse_reward([ground_truth], each_resp[0], Tt)
+                weighted_avg_score = 0.3*classification_score + 0.7*parsing_score
                 scores_array[idx]=weighted_avg_score
 
     return scores_array

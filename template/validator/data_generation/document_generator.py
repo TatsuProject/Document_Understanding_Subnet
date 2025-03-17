@@ -371,7 +371,7 @@ class GenerateDocument:
         img = np.array(img)
         img = apply_scan_effects(img)
         
-        GT_json = {
+        ner_annotations = {
             "folder_title": bounding_boxes.get("folder_title", {"text": "", "bounding_box": []}),
             "folder_id": bounding_boxes.get("folder_id", {"text": "", "bounding_box": []}),
             "creation_date": bounding_boxes.get("creation_date", {"text": "", "bounding_box": []}),
@@ -379,6 +379,11 @@ class GenerateDocument:
             "department": bounding_boxes.get("department", {"text": "", "bounding_box": []}),
             "contained_documents": contained_doc_boxes,
             "tags": tag_boxes
+        }
+
+        GT_json = {
+            "document_class": "file_folder",
+            "NER": ner_annotations
         }
         
         return GT_json, img
@@ -734,7 +739,17 @@ class GenerateDocument:
         }
 
         x, y = 50, 50
-        ner_annotations = []
+        ner_annotations = {
+            "sender_name": {"text": "", "bounding_box": []},
+            "sender_position": {"text": "", "bounding_box": []},
+            "recipient_name": {"text": "", "bounding_box": []},
+            "recipient_position": {"text": "", "bounding_box": []},
+            "cc": [],
+            "date": {"text": "", "bounding_box": []},
+            "subject": {"text": "", "bounding_box": []},
+            "reference_number": {"text": "", "bounding_box": []},
+            "attachments": []
+        }
 
         title_font = ImageFont.truetype(random.choice(FONTS), 40)
         draw.text((x, y), "MEMO", font=title_font, fill="black")
@@ -749,7 +764,12 @@ class GenerateDocument:
             draw.text((x, y), f"{label}: {content}", font=font, fill="black")
             text_bbox = draw.textbbox((x, y), f"{label}: {content}", font=font)
             bounding_box = [x, y, text_bbox[2], text_bbox[3]]
-            ner_annotations.append({"label": label.lower(), "content": content, "bounding_box": bounding_box})
+            
+            if label in ["cc", "attachments"]:
+                ner_annotations[label].append({"text": content, "bounding_box": bounding_box})
+            else:
+                ner_annotations[label] = {"text": content, "bounding_box": bounding_box}
+            
             y += text_bbox[3] - text_bbox[1] + offset
         
         for key, value in metadata.items():
@@ -932,7 +952,7 @@ class GenerateDocument:
             ner_annotations["respondent_id"] = {"text": metadata['Respondent ID'], "bounding_box": [x1, y1, x2, y2]}
             y += 40
 
-        ner_annotations["questions"] = []
+        # ner_annotations["questions"] = []
         for idx, q in enumerate(questions):
             font = ImageFont.truetype(random.choice(FONTS), 22)
             draw.text((x, y), f"Q{idx + 1}: {q['question']}", font=font, fill="black")
@@ -949,7 +969,7 @@ class GenerateDocument:
                 y += y2 - y1 + 5
             y += 15
 
-            ner_annotations["questions"].append(question_entry)
+            # ner_annotations["questions"].append(question_entry)
 
         image_cv = np.array(img)
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
@@ -1161,7 +1181,7 @@ class GenerateDocument:
 
         
 
-    def scientific_report(FONTS):
+    def scientific_report(self, FONTS):
         SCIENTIFIC_TERMS = [
             "Quantum Mechanics", "Neural Networks", "DNA Sequencing", "Photosynthesis",
             "Machine Learning", "Protein Folding", "Nanotechnology", "Gene Editing",
@@ -1279,13 +1299,12 @@ class GenerateDocument:
             "key_requirements": [fake.sentence() for _ in range(random.randint(1, 3))]
         }
 
-        # Add Mobile Specs Section
         mobile_specs = {
             "section_title": "Mobile Specs",
             "section_number": f"RAM: {random.choice(['4GB', '6GB', '8GB'])}, "
-                            f"Storage: {random.choice(['64GB', '128GB', '256GB'])}, "
-                            f"Camera: {random.choice(['12MP', '48MP', '64MP'])}, "
-                            f"Battery: {random.choice(['3000mAh', '4000mAh', '5000mAh'])}"
+                                f"Storage: {random.choice(['64GB', '128GB', '256GB'])}, "
+                                f"Camera: {random.choice(['12MP', '48MP', '64MP'])}, "
+                                f"Battery: {random.choice(['3000mAh', '4000mAh', '5000mAh'])}"
         }
         specification_data["key_sections"].append(mobile_specs)
 
@@ -1305,32 +1324,30 @@ class GenerateDocument:
             if text_img is not None:
                 img.paste(text_img, (x, y), text_img)
                 absolute_bbox = [x, y, x + bbox[2], y + bbox[3]]
-                ner_annotations[label]["text"] = content
-                ner_annotations[label]["bounding_box"] = absolute_bbox
+                
+                if label in ner_annotations:
+                    ner_annotations[label]["text"] = content
+                    ner_annotations[label]["bounding_box"] = absolute_bbox
+                
                 y += bbox[3] + int(font_size * 0.4)
+                return absolute_bbox
+            return []
 
         add_text("title", specification_data["title"], font_size=40)
         add_text("date", specification_data["date"], font_size=30)
         add_text("organization", specification_data["organization"], font_size=30)
 
         for section in specification_data["key_sections"]:
-            section_data = {
-                "section_title": {"text": section["section_title"], "bounding_box": []},
-                "section_number": {"text": section["section_number"], "bounding_box": []}
-            }
-            add_text("section_title", section["section_title"], font_size=28)
-            add_text("section_number", section["section_number"], font_size=28)
+            section_data = {}
+            section_data["section_title"] = {"text": section["section_title"], "bounding_box": add_text("key_sections", section["section_title"], font_size=28)}
+            section_data["section_number"] = {"text": section["section_number"], "bounding_box": add_text("key_sections", section["section_number"], font_size=28)}
             ner_annotations["key_sections"].append(section_data)
 
         for compliance in specification_data["regulatory_compliance"]:
-            compliance_data = {"text": compliance, "bounding_box": []}
-            add_text("regulatory_compliance", compliance, font_size=28)
-            ner_annotations["regulatory_compliance"].append(compliance_data)
+            ner_annotations["regulatory_compliance"].append({"text": compliance, "bounding_box": add_text("regulatory_compliance", compliance, font_size=28)})
 
         for requirement in specification_data["key_requirements"]:
-            requirement_data = {"text": requirement, "bounding_box": []}
-            add_text("key_requirements", requirement, font_size=28)
-            ner_annotations["key_requirements"].append(requirement_data)
+            ner_annotations["key_requirements"].append({"text": requirement, "bounding_box": add_text("key_requirements", requirement, font_size=28)})
 
         image_cv = np.array(img)
         if image_cv.dtype != np.uint8:
