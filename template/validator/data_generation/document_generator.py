@@ -1125,58 +1125,66 @@ class GenerateDocument:
         }
         
         x, y = 100, header_height + 50
-        ner_annotations = {}
+        ner_annotations = {
+            "title": {},
+            "authors": [],
+            "publication_date": {},
+            "abstract": {"text": "", "bounding_box": []},
+        }
         
-        def add_text(label, content, font_size=30, offset=15, is_list=False):
+        def add_text(label, content, font_size=30, offset=15, entry=None):
             nonlocal y
             font = ImageFont.truetype(random.choice(FONTS), font_size)
             draw.text((x, y), content, font=font, fill="black")
             text_bbox = draw.textbbox((x, y), content, font=font)
-            if is_list:
-                ner_annotations[label].append({"text": content, "bounding_box": text_bbox})
+
+            if entry is not None:
+                entry[label] = {"text": content, "bounding_box": text_bbox}
             else:
                 ner_annotations[label] = {"text": content, "bounding_box": text_bbox}
+
             y += text_bbox[3] - text_bbox[1] + offset
-        
-        # Populate GT_json structure
-        ner_annotations["title"] = {}
+
+        # Title
         add_text("title", publication_data["title"], font_size=50, offset=40)
-        
-        ner_annotations["authors"] = []
-        author_entry = {"name": {}, "affiliation": {}}
-        add_text("name", publication_data["author"], font_size=28, offset=20, is_list=True)
+
+        # Authors
+        author_entry = {}
+        add_text("name", publication_data["author"], font_size=28, offset=20, entry=author_entry)
+
         if publication_data["affiliation"]:
-            add_text("affiliation", publication_data["affiliation"], font_size=28, offset=20, is_list=True)
+            add_text("affiliation", publication_data["affiliation"], font_size=28, offset=20, entry=author_entry)
+
         ner_annotations["authors"].append(author_entry)
-        
-        ner_annotations["publication_date"] = {}
+
+        # Publication Date
         add_text("publication_date", publication_data["date"], font_size=28, offset=20)
-        
+
+        # Journal/Conference (if present)
         if publication_data["journal_conference"]:
             ner_annotations["journal_conference_name"] = {}
             add_text("journal_conference_name", publication_data["journal_conference"], font_size=28, offset=20)
-        
-        ner_annotations["abstract"] = {}
+
+        # Abstract
         add_text("abstract", "Abstract:", font_size=32, offset=10)
-        ner_annotations["abstract"]["text"] = ""
-        ner_annotations["abstract"]["bounding_box"] = []
         for line in publication_data["abstract"].split("\n"):
             add_text("abstract", line, font_size=26, offset=10)
-        
+
+        # Convert Image to Noisy and Rotated Version
         image_cv = np.array(img)
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.int16)
         noisy_image = np.clip(image_cv + noise, 0, 255).astype(np.uint8)
-        
+
         angle = random.uniform(-5, 5)
         center = (img_size[0] // 2, img_size[1] // 2)
         matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
         rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
-        
+
         GT_json = {
             "document_class": "scientific_publication",
             "NER": ner_annotations
         }
-        
+
         return GT_json, rotated_image
 
         
