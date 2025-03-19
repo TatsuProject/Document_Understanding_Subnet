@@ -1443,7 +1443,6 @@ class GenerateDocument:
 
         # Randomly select a function
         selected_function = random.choice(list(function_map.keys()))
-        selected_function = self.specifications
         # Call the selected function with its corresponding argument
         GT_json, image = selected_function(function_map[selected_function])
         if image.ndim == 2:  # Grayscale
