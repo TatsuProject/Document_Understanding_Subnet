@@ -191,6 +191,8 @@ def doc_class_reward(ground_truth: list, response: ProfileSynapse, Tt: float) ->
     Returns:
     - float: The reward value for the miner.
     """
+    if len(response.miner_output)==0:
+        return 0.0
     if isinstance(response.miner_output[0], str):
         doc_class_detected = str(response.miner_output[0])
     elif isinstance(response.miner_output[0], dict) and "document_class" in response.miner_output[0]:
@@ -280,6 +282,8 @@ def doc_parse_reward(ground_truth: list, response: ProfileSynapse, Tt: float) ->
     - float: Reward score.
     """
     try:
+        if len(response.miner_output)==0:
+            return 0.0
         doc_parsing_detected = response.miner_output[0].get("NER", {})
         actual_parsing = ground_truth[0].get("NER", {})
 
