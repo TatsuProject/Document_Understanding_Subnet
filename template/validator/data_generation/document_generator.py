@@ -1269,6 +1269,7 @@ class GenerateDocument:
         DEFAULT_FONT = random.choice(FONTS)
 
         def generate_text(text, font_size):
+            """ Generates text as an image with correct bounding box """
             try:
                 font = ImageFont.truetype(DEFAULT_FONT, font_size)
             except Exception as e:
@@ -1280,17 +1281,23 @@ class GenerateDocument:
             bbox = temp_draw.textbbox((0, 0), text, font=font)
             text_width, text_height = bbox[2] - bbox[0], bbox[3] - bbox[1]
 
-            img = Image.new("RGBA", (text_width + 10, text_height + 10), (255, 255, 255, 0))
+            # Create image with padding
+            padding = 8
+            img = Image.new("RGBA", (text_width + padding, text_height + padding), (255, 255, 255, 0))
             draw = ImageDraw.Draw(img)
-            draw.text((5, 5), text, font=font, fill=(0, 0, 0, 255))
-            angle = random.uniform(-5, 5)
-            img = img.rotate(angle, expand=True)
+            draw.text((padding // 2, padding // 2), text, font=font, fill=(0, 0, 0, 255))
+
+            # Apply slight rotation
+            # angle = random.uniform(-3, 3)
+            # img = img.rotate(angle, expand=True)
 
             return img, (0, 0, text_width, text_height)
 
         img_size = random.choice(IMAGE_SIZES)
         img = Image.new("RGB", img_size, "white")
         draw = ImageDraw.Draw(img)
+
+        # Add header & footer
         header_height, footer_height = 100, 80
         draw.rectangle([0, 0, img_size[0], header_height], fill="lightgray")
         draw.rectangle([0, img_size[1] - footer_height, img_size[0], img_size[1]], fill="lightgray")
@@ -1302,21 +1309,14 @@ class GenerateDocument:
             "key_sections": [{
                 "section_title": fake.catch_phrase(),
                 "section_number": fake.bothify(text="##.##")
-            } for _ in range(random.randint(1, 3))],
+            } for _ in range(random.randint(2, 4))],
             "regulatory_compliance": [fake.sentence() for _ in range(random.randint(0, 2))],
             "key_requirements": [fake.sentence() for _ in range(random.randint(1, 3))]
         }
 
-        mobile_specs = {
-            "section_title": "Mobile Specs",
-            "section_number": f"RAM: {random.choice(['4GB', '6GB', '8GB'])}, "
-                                f"Storage: {random.choice(['64GB', '128GB', '256GB'])}, "
-                                f"Camera: {random.choice(['12MP', '48MP', '64MP'])}, "
-                                f"Battery: {random.choice(['3000mAh', '4000mAh', '5000mAh'])}"
-        }
-        specification_data["key_sections"].append(mobile_specs)
-
         x, y = 50, header_height + 40
+        line_spacing_factor = 1.5  # Increased line spacing factor
+
         ner_annotations = {
             "title": {"text": "", "bounding_box": []},
             "date": {"text": "", "bounding_box": []},
@@ -1327,44 +1327,70 @@ class GenerateDocument:
         }
 
         def add_text(label, content, font_size=32):
+            """ Adds text to the image with proper spacing and bounding box handling """
             nonlocal y
+
             text_img, bbox = generate_text(content, font_size)
+            
             if text_img is not None:
                 img.paste(text_img, (x, y), text_img)
-                absolute_bbox = [x, y, x + bbox[2], y + bbox[3]]
-                
-                if label in ner_annotations:
+
+                text_height = bbox[3]
+                absolute_bbox = [x, y, x + bbox[2], y + text_height]
+
+                if label in ["title", "date", "organization"]:
                     ner_annotations[label]["text"] = content
                     ner_annotations[label]["bounding_box"] = absolute_bbox
-                
-                y += bbox[3] + int(font_size * 0.4)
+                elif label in ["section_title", "section_number"]:
+                    y = y + int(text_height * line_spacing_factor)
+                    return absolute_bbox
+                else:
+                    ner_annotations[label].append({"text": content, "bounding_box": absolute_bbox})
+
+                # Update y-coordinate with proper spacing
+                y = y + int(text_height * line_spacing_factor)
                 return absolute_bbox
             return []
 
+        # Add main elements
         add_text("title", specification_data["title"], font_size=40)
         add_text("date", specification_data["date"], font_size=30)
         add_text("organization", specification_data["organization"], font_size=30)
 
+        # Add key sections with clear spacing
+        key_section_spacing = 0
         for section in specification_data["key_sections"]:
-            section_data = {}
-            section_data["section_title"] = {"text": section["section_title"], "bounding_box": add_text("key_sections", section["section_title"], font_size=28)}
-            section_data["section_number"] = {"text": section["section_number"], "bounding_box": add_text("key_sections", section["section_number"], font_size=28)}
+            section_data = {
+                "section_title": {"text": section["section_title"], "bounding_box": add_text("section_title", section["section_title"], font_size=28)},
+                "section_number": {"text": section["section_number"], "bounding_box": add_text("section_number", section["section_number"], font_size=28)}  # Extra spacing added
+            }
             ner_annotations["key_sections"].append(section_data)
-
+            key_section_spacing+=140
+        # Add regulatory compliance
         for compliance in specification_data["regulatory_compliance"]:
-            ner_annotations["regulatory_compliance"].append({"text": compliance, "bounding_box": add_text("regulatory_compliance", compliance, font_size=28)})
+            ner_annotations["regulatory_compliance"].append({
+                "text": compliance,
+                "bounding_box": add_text("regulatory_compliance", compliance, font_size=28)
+            })
 
+        # Add key requirements
         for requirement in specification_data["key_requirements"]:
-            ner_annotations["key_requirements"].append({"text": requirement, "bounding_box": add_text("key_requirements", requirement, font_size=28)})
+            ner_annotations["key_requirements"].append({
+                "text": requirement,
+                "bounding_box": add_text("key_requirements", requirement, font_size=28)
+            })
 
+        # Convert to OpenCV format
         image_cv = np.array(img)
         if image_cv.dtype != np.uint8:
             image_cv = image_cv.astype(np.uint8)
 
+        # Add noise
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
 
-        angle = random.uniform(-5, 5)
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
         center = (img_size[0] // 2, img_size[1] // 2)
         matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
         rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
@@ -1377,7 +1403,6 @@ class GenerateDocument:
         return GT_json, rotated_image
         
 
-        
     def generate_document(self):
         FONTS = [os.path.join(script_dir, "fonts/Arial.ttf"), 
                  os.path.join(script_dir, "fonts/Arial_Bold_Italic.ttf"),
@@ -1418,7 +1443,7 @@ class GenerateDocument:
 
         # Randomly select a function
         selected_function = random.choice(list(function_map.keys()))
-
+        selected_function = self.specifications
         # Call the selected function with its corresponding argument
         GT_json, image = selected_function(function_map[selected_function])
         if image.ndim == 2:  # Grayscale
