@@ -586,13 +586,8 @@ class GenerateDocument:
                     y_offset += font_size + 10  # Adjust line spacing
                 return {"text": text, "bounding_box": bbox}
 
-                gt_template["invoice_number"] = draw_text("invoice_number", f"Invoice #: {fake.uuid4()[:8]}")
-                gt_template["invoice_number"] = draw_text("invoice_number", f"Invoice #: {fake.uuid4()[:8]}")
 
-            if random.choice([True, False]):
             gt_template["invoice_number"] = draw_text("invoice_number", f"Invoice #: {fake.uuid4()[:8]}")
-
-            if random.choice([True, False]):
             gt_template["date"] = draw_text("date", f"Date: {fake.date()}")
             gt_template["organization"] = draw_text("organization", f"{fake.company()}")
             gt_template["payee_name"] = draw_text("payee_name", f"Buyer: {fake.name()}")
@@ -1550,8 +1545,8 @@ class GenerateDocument:
 
         # Add noise and rotate the image
         img = add_noise(img)
-        # rotated_image = rotate_image(img)
-        image_cv = np.array(img)
+        rotated_image = rotate_image(img)
+        image_cv = np.array(rotated_image)
 
         GT_json = {"document_class": "medical_document", "NER": ner_annotations}
         return GT_json, image_cv
