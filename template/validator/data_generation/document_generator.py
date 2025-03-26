@@ -539,7 +539,7 @@ class GenerateDocument:
         def add_noise(image):
             """Adds random noise to an image."""
             np_image = np.array(image)
-            noise = np.random.normal(0, 25, np_image.shape).astype(np.uint8)
+            noise = np.random.normal(0, 0.5, np_image.shape).astype(np.uint8)
             noisy_image = np.clip(np_image + noise, 0, 255)  # Ensure values stay in valid range
             return Image.fromarray(noisy_image)
 
@@ -554,6 +554,7 @@ class GenerateDocument:
             Returns a dictionary containing bounding boxes for NER.
             """
             y_offset = 50
+            x_offset = 50
             font_size = random.choice(FONT_SIZES)
             font = ImageFont.truetype(FONT_PATH, font_size)
 
@@ -574,23 +575,27 @@ class GenerateDocument:
             def draw_text(label, text):
                 """Helper function to draw text and record bounding box."""
                 nonlocal y_offset
-                draw.text((50, y_offset), text, fill="black", font=font)
-                bbox = draw.textbbox((50, y_offset), text, font=font)  # Corrected for Pillow 10.x.x
-                y_offset += font_size + 10  # Adjust line spacing
+                nonlocal x_offset
+                draw.text((x_offset, y_offset), text, fill="black", font=font)
+                bbox = draw.textbbox((x_offset, y_offset), text, font=font)  # Corrected for Pillow 10.x.x
+
+                if label in ["item", "quantity"]:
+                    x_offset += 250
+                else:
+                    x_offset = 50
+                    y_offset += font_size + 10  # Adjust line spacing
                 return {"text": text, "bounding_box": bbox}
 
-            # Generate fields dynamically based on a random selection
-            if random.choice([True, False]):
+                gt_template["invoice_number"] = draw_text("invoice_number", f"Invoice #: {fake.uuid4()[:8]}")
                 gt_template["invoice_number"] = draw_text("invoice_number", f"Invoice #: {fake.uuid4()[:8]}")
 
             if random.choice([True, False]):
-                gt_template["date"] = draw_text("date", f"Date: {fake.date()}")
+            gt_template["invoice_number"] = draw_text("invoice_number", f"Invoice #: {fake.uuid4()[:8]}")
 
             if random.choice([True, False]):
-                gt_template["organization"] = draw_text("organization", f"From: {fake.company()}")
-
-            if random.choice([True, False]):
-                gt_template["payee_name"] = draw_text("payee_name", f"To: {fake.name()}")
+            gt_template["date"] = draw_text("date", f"Date: {fake.date()}")
+            gt_template["organization"] = draw_text("organization", f"{fake.company()}")
+            gt_template["payee_name"] = draw_text("payee_name", f"Buyer: {fake.name()}")
 
             # Draw table headers
             y_offset += 20
@@ -604,14 +609,14 @@ class GenerateDocument:
 
                 # Add item to GT structure
                 gt_template["purchased_item"].append({
-                    "item": draw_text("item", f"{item}      {qty}"),
+                    "item": draw_text("item", f"{item}"),
+                    "quantity": draw_text("quantity", f"{qty}"),
                     "price": draw_text("price", f"{price}")
                 })
 
             y_offset += 10
 
-            if random.choice([True, False]):
-                gt_template["total_amount"] = draw_text("total_amount", f"Total: ${random.randint(100, 1000)}")
+            gt_template["total_amount"] = draw_text("total_amount", f"Total: ${random.randint(100, 1000)}")
 
             if random.choice([True, False]):
                 gt_template["discount_amount"] = draw_text("discount_amount", f"Discount: ${random.randint(5, 50)}")
@@ -619,8 +624,7 @@ class GenerateDocument:
             if random.choice([True, False]):
                 gt_template["tax_amount"] = draw_text("tax_amount", f"Tax: ${random.randint(5, 50)}")
 
-            if random.choice([True, False]):
-                gt_template["final_amount"] = draw_text("final_amount", f"Final Total: ${random.randint(150, 2000)}")
+            gt_template["final_amount"] = draw_text("final_amount", f"Final Total: ${random.randint(150, 2000)}")
 
             return gt_template
 
@@ -649,6 +653,9 @@ class GenerateDocument:
         IMAGE_SIZES = [(800, 1000), (850, 1100), (900, 1200), (1000, 1300), (1100, 1400), (1200, 1500)]
         TEMPLATES = ["simple", "header_footer"]
 
+        font_path = random.choice(FONTS)
+        font_size = random.randint(20, 30)
+
         img_size = random.choice(IMAGE_SIZES)
         img = Image.new('RGB', img_size, 'white')
         draw = ImageDraw.Draw(img)
@@ -660,23 +667,23 @@ class GenerateDocument:
             draw.rectangle([(0, img_size[1] - 80), (img_size[0], img_size[1])], fill="black")  # Footer
         
         # Generate document fields with optional inclusion
-        sender_name = fake.company() if random.choice([True, False]) else ""
-        sender_address = fake.address() if random.choice([True, False]) else ""
-        sender_contact = fake.phone_number() if random.choice([True, False]) else ""
-        receiver_name = fake.name() if random.choice([True, False]) else ""
-        receiver_address = fake.address() if random.choice([True, False]) else ""
-        date = fake.date() if random.choice([True, False]) else ""
+        sender_name = fake.name() 
+        sender_address = fake.address() 
+        sender_contact = fake.phone_number() 
+        receiver_name = fake.name() 
+        receiver_address = fake.address() 
+        date = fake.date()
         attachments = [fake.word() for _ in range(random.randint(0, 3))]  # 0 to 3 attachments
         
         # Content mapping for drawing text and generating bounding boxes
         content = {
+            "Receiver Address": receiver_address,
+            "Date": date,
+            "Receiver Name": receiver_name,
+            "body": "\n".join(fake.sentences(nb=random.randint(5, 8))),
             "Sender Name": sender_name,
             "Sender Address": sender_address,
             "Sender Contact": sender_contact,
-            "Date": date,
-            "Receiver Name": receiver_name,
-            "Receiver Address": receiver_address,
-            "Attachments": "\n".join(attachments) if attachments else ""
         }
         
         x, y = 50, 100
@@ -684,24 +691,32 @@ class GenerateDocument:
         
         for label, text in content.items():
             if text:  # Only include if the field has content
-                font_path = random.choice(FONTS)
-                font_size = random.randint(20, 30)
                 font = ImageFont.truetype(font_path, font_size)
+
+                if label == "body":
+                    y+=20
+                if label == "Receiver Name":
+                    text = f"Dear {text}, "
+                if label == "Sender Name":
+                    ending_word = random.choice(["Well-wisher", "Benefactor", "Patron", "Supporter"])
+                    text = f"Your {ending_word}: {text}"
                 
                 bbox = draw.textbbox((x, y), text, font=font)
                 draw.text((x, y), text, font=font, fill="black")
                 y += bbox[3] - bbox[1] + 20  # Adjust Y position based on text height
                 
                 # Map label to GT key format
+                if label == "body":
+                    x += 300
+                    y += 20
+                    continue
+
                 gt_key = label.lower().replace(" ", "_")
-                if gt_key == "attachments":
-                    ner_annotations[gt_key] = [{"text": text, "bounding_box": bbox}] if text else []
-                else:
-                    ner_annotations[gt_key] = {"text": text, "bounding_box": bbox}
+                ner_annotations[gt_key] = {"text": text, "bounding_box": bbox}
         
         # Convert to OpenCV for noise & rotation
         image_cv = np.array(img)
-        noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
+        noise = np.random.normal(0, 0.5, image_cv.shape).astype(np.uint8)
         noisy_image = np.clip(image_cv + noise, 0, 255)
         
         angle = random.uniform(-5, 5)
@@ -1401,6 +1416,180 @@ class GenerateDocument:
         }
 
         return GT_json, rotated_image
+
+
+    def medical_document(self, FONTS):
+        IMAGE_SIZES = [(1000, 1400), (1200, 1600), (1400, 1800), (1600, 2000), (1800, 2200), (2000, 2400)]
+        DEFAULT_FONT = random.choice(FONTS)
+        FONT_SIZES = [24, 28, 32, 36]
+
+        def add_noise(image):
+            """Adds random noise to an image."""
+            np_image = np.array(image)
+            noise = np.random.normal(0, 0.5, np_image.shape).astype(np.uint8)
+            noisy_image = np.clip(np_image + noise, 0, 255)
+            return Image.fromarray(noisy_image)
+
+        def rotate_image(image):
+            """Rotates the image slightly to mimic a scanned document."""
+            angle = random.randint(-5, 5)
+            return image.rotate(angle, expand=True)
+
+        def draw_text(draw, text, x, y, font):
+            """Helper function to draw text and return bounding box."""
+            draw.text((x, y), text, fill="black", font=font)
+            bbox = draw.textbbox((x, y), text, font=font)  
+            return {"text": text, "bounding_box": bbox}
+
+        # Create image
+        img_width, img_height = random.choice(IMAGE_SIZES)
+        img = Image.new("RGB", (img_width, img_height), "white")
+        draw = ImageDraw.Draw(img)
+        font_size = random.choice(FONT_SIZES)
+        font = ImageFont.truetype(DEFAULT_FONT, font_size)
+
+        # Initialize annotations
+        ner_annotations = {"hospital": {}, "patient_information": {}, "physician_information": {},
+                        "procedures": [], "diagnosis": [], "medical_history": {}, 
+                        "medication": {}, "lab_tests": []}
+
+        x_offset, y_offset = 50, 50
+
+        # Hospital/Facility Name
+        hospital_name = fake.company()
+        hospital_keyword = random.choice(["Hospital", "Clinic", "Medical Facility"])
+        hospital_name = f"{hospital_name} {hospital_keyword}"
+        ner_annotations["hospital"]["name"] = draw_text(draw, hospital_name, x_offset, y_offset, font)
+        y_offset += font_size + 20
+
+        # Patient Information
+        patient_info = {
+            "patient name": fake.name(),
+            "DOB": fake.date_of_birth(minimum_age=18, maximum_age=90).strftime("%Y-%m-%d"),
+            "member_id": fake.uuid4()[:10].upper()
+        }
+        for key, value in patient_info.items():
+            ner_annotations["patient_information"][key] = draw_text(draw, f"{key.capitalize()}: {value}", x_offset, y_offset, font)
+            y_offset += font_size + 10
+
+        # Physician Information
+        y_offset += 20
+        physician_info = {
+            "physician name": fake.name(),
+            "tax_id": fake.random_number(9, True),
+            "provider_id": fake.uuid4()[:8].upper()
+        }
+        for key, value in physician_info.items():
+            ner_annotations["physician_information"][key] = draw_text(draw, f"{key.capitalize()}: {value}", x_offset, y_offset, font)
+            y_offset += font_size + 10
+
+        y_offset += 20  # Space before next section
+
+        # Procedures Section
+        y_offset += 20
+        for _ in range(random.randint(2, 4)):
+            procedure = {
+                "cpt_code": fake.random_int(10000, 99999),
+                "reason": fake.sentence(nb_words=6)
+            }
+            proc_annotations = {
+                "cpt_code": draw_text(draw, f"CPT: {procedure['cpt_code']}", x_offset, y_offset, font),
+                "reason": draw_text(draw, f"Reason: {procedure['reason']}", x_offset, y_offset + font_size + 5, font)
+            }
+            ner_annotations["procedures"].append(proc_annotations)
+            y_offset += font_size * 2 + 10
+
+        y_offset += 20  # Space before next section
+
+        # Diagnosis Section
+        y_offset += 20
+        for _ in range(random.randint(2, 4)):
+            diagnosis = {
+                "icd_code": f"{random.randint(1, 99)}.{random.randint(0, 99)}",
+                "diagnosis": fake.sentence(nb_words=6)
+            }
+            diag_annotations = {
+                "icd_code": draw_text(draw, f"ICD: {diagnosis['icd_code']}", x_offset, y_offset, font),
+                "diagnosis": draw_text(draw, f"Diagnosis: {diagnosis['diagnosis']}", x_offset, y_offset + font_size + 5, font)
+            }
+            ner_annotations["diagnosis"].append(diag_annotations)
+            y_offset += font_size * 2 + 10
+
+        y_offset += 20  # Space before next section
+
+        # Optional Sections
+        if random.choice([True, False]):  # Medical History
+            y_offset += 20
+            history_text = "\n".join(fake.sentences(nb=random.randint(3, 5)))
+            ner_annotations["medical_history"] = draw_text(draw, f"Medical History: {history_text}", x_offset, y_offset, font)
+            y_offset += font_size * 5 + 10
+
+        if random.choice([True, False]):  # Medication
+            y_offset += 20
+            ner_annotations["medication"] = {
+                "past": draw_text(draw, f"Past Medications: {fake.sentence(nb_words=5)}", x_offset, y_offset, font),
+                "prescribed": draw_text(draw, f"Prescribed Medications: {fake.sentence(nb_words=5)}", x_offset, y_offset + font_size + 5, font)
+            }
+            y_offset += font_size * 2 + 10
+
+        if random.choice([True, False]):  # Lab Tests
+            y_offset += 20
+            for _ in range(random.randint(2, 4)):
+                lab_test = {
+                    "test_name": fake.word().capitalize(),
+                    "normal_values": f"{random.randint(10, 100)}-{random.randint(101, 200)}",
+                    "test_result": f"{random.randint(10, 200)} {random.choice(['Normal', 'High', 'Low'])}"
+                }
+                lab_annotations = {
+                    "test_name": draw_text(draw, f"Test: {lab_test['test_name']}", x_offset, y_offset, font),
+                    "normal_values": draw_text(draw, f"Normal: {lab_test['normal_values']}", x_offset, y_offset + font_size + 5, font),
+                    "test_result": draw_text(draw, f"Result: {lab_test['test_result']}", x_offset, y_offset + font_size * 2 + 10, font)
+                }
+                ner_annotations["lab_tests"].append(lab_annotations)
+                y_offset += font_size * 3 + 10
+
+        # Add noise and rotate the image
+        img = add_noise(img)
+        # rotated_image = rotate_image(img)
+        image_cv = np.array(img)
+
+        GT_json = {"document_class": "medical_document", "NER": ner_annotations}
+        return GT_json, image_cv
+
+
+    def other(self, FONTS):
+        IMAGE_SIZES = [(1000, 1400), (1200, 1600), (1400, 1800), (1600, 2000), (1800, 2200), (2000, 2400)]
+        DEFAULT_FONT = random.choice(FONTS)  # Not used, but follows your function signature
+
+        # Randomly select an image size
+        img_size = random.choice(IMAGE_SIZES)
+        image = np.random.randint(0, 256, (img_size[1], img_size[0], 3), dtype=np.uint8)  # Noise background
+
+        # Draw random lines, circles, and shapes
+        for _ in range(random.randint(50, 100)):  # Random number of shapes
+            x1, y1 = random.randint(0, img_size[0]), random.randint(0, img_size[1])
+            x2, y2 = random.randint(0, img_size[0]), random.randint(0, img_size[1])
+            color = tuple(np.random.randint(0, 256, 3).tolist())
+            thickness = random.randint(1, 5)
+
+            shape_type = random.choice(["line", "circle", "rectangle"])
+            if shape_type == "line":
+                cv2.line(image, (x1, y1), (x2, y2), color, thickness)
+            elif shape_type == "circle":
+                radius = random.randint(10, 100)
+                cv2.circle(image, (x1, y1), radius, color, thickness)
+            elif shape_type == "rectangle":
+                cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
+
+        # Rotate the image randomly between -45 to 45 degrees
+        angle = random.uniform(-45, 45)
+        center = (img_size[0] // 2, img_size[1] // 2)
+        M = cv2.getRotationMatrix2D(center, angle, 1.0)
+        rotated_image = cv2.warpAffine(image, M, (img_size[0], img_size[1]))
+
+        # Return empty NER JSON
+        GT_json = {"document_class": "other", "NER": {}}
+        return GT_json, rotated_image
         
 
     def generate_document(self):
@@ -1439,6 +1628,8 @@ class GenerateDocument:
             self.scientific_publication:FONTS,
             self.scientific_report:FONTS,
             self.specifications:FONTS,
+            self.medical_document:FONTS,
+            self.other:FONTS
         }
 
         # Randomly select a function
