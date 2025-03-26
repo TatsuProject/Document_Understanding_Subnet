@@ -1186,9 +1186,8 @@ class GenerateDocument:
         noisy_image = np.clip(image_cv + noise, 0, 255).astype(np.uint8)
 
         angle = random.uniform(-5, 5)
-        center = (img_size[0] // 2, img_size[1] // 2)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, img)
+        rotated_image = np.array(rotated_image)
 
         GT_json = {
             "document_class": "scientific_publication",
@@ -1254,7 +1253,7 @@ class GenerateDocument:
             "affiliation": {"text": report_data["affiliation"], "bounding_box": []}
         }]
         add_text("authors", f"Author: {report_data['author']}", font_size=28, offset=20)
-        add_text("authors", f"Affiliation: {report_data['affiliation']}", font_size=28, offset=20)
+        add_text("affiliation", f"Affiliation: {report_data['affiliation']}", font_size=28, offset=20)
         add_text("date", f"Date: {report_data['date']}", font_size=28, offset=20)
         for keyword in report_data["keywords"]:
             add_text("keywords", keyword, font_size=28, offset=20, is_list=True)
@@ -1266,9 +1265,8 @@ class GenerateDocument:
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
         angle = random.uniform(-5, 5)
-        center = (img_size[0] // 2, img_size[1] // 2)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, img)
+        rotated_image = np.array(rotated_image)
         
         GT_json = {"document_class": "scientific_report", "NER": ner_annotations}
         return GT_json, rotated_image
@@ -1401,16 +1399,15 @@ class GenerateDocument:
 
         # Rotate image slightly
         angle = random.uniform(-3, 3)
-        center = (img_size[0] // 2, img_size[1] // 2)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, img)
+        image_cv = np.array(rotated_image)
 
         GT_json = {
             "document_class": "specification",
             "NER": ner_annotations
         }
 
-        return GT_json, rotated_image
+        return GT_json, image_cv
 
 
     def medical_document(self, FONTS):
@@ -1545,7 +1542,8 @@ class GenerateDocument:
 
         # Add noise and rotate the image
         img = add_noise(img)
-        rotated_image = rotate_image(img)
+        angle = random.randint(-5, 5)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, img)
         image_cv = np.array(rotated_image)
 
         GT_json = {"document_class": "medical_document", "NER": ner_annotations}
@@ -1585,6 +1583,66 @@ class GenerateDocument:
         # Return empty NER JSON
         GT_json = {"document_class": "other", "NER": {}}
         return GT_json, rotated_image
+
+
+    def transform_bounding_boxes(self, ner_annotations, angle, image):
+        """Transforms bounding boxes inside ner_annotations to 8-point format after rotation."""
+        
+        # Get image dimensions
+        w, h = image.size
+        center = (w // 2, h // 2)
+
+        # Compute rotation matrix
+        M = cv2.getRotationMatrix2D(center, angle, 1.0)
+        rotated_img = image.rotate(angle, expand=True)
+        new_w, new_h = rotated_img.size
+
+        def rotate_bbox(bbox):
+            """Rotates a bounding box and converts it into an 8-point polygon."""
+            x1, y1, x2, y2 = bbox  # Original bounding box
+
+            # Get all 4 corner points
+            points = np.array([
+                [x1, y1],  # Top-left
+                [x2, y1],  # Top-right
+                [x2, y2],  # Bottom-right
+                [x1, y2]   # Bottom-left
+            ])
+
+            # Apply rotation transformation
+            ones = np.ones((4, 1))
+            points = np.hstack([points, ones])  # Convert to homogeneous coordinates
+            rotated_points = M.dot(points.T).T  # Apply transformation
+
+            # Adjust coordinates to fit new image size
+            x_offset = (new_w - w) // 2
+            y_offset = (new_h - h) // 2
+            rotated_points[:, 0] += x_offset
+            rotated_points[:, 1] += y_offset
+
+            # Convert to list (flatten to store as 8 points)
+            return rotated_points.flatten().tolist()
+
+        def update_annotations(data):
+            """Recursively updates bounding boxes in the annotations."""
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    if isinstance(value, dict):
+                        if "bounding_box" in value:
+                            value["bounding_box"] = rotate_bbox(value["bounding_box"])
+                        else:
+                            update_annotations(value)
+                    elif isinstance(value, list):
+                        for item in value:
+                            if isinstance(item, dict) and "bounding_box" in item:
+                                item["bounding_box"] = rotate_bbox(item["bounding_box"])
+                            elif isinstance(item, dict):
+                                update_annotations(item)
+
+        # Apply transformations to bounding boxes
+        update_annotations(ner_annotations)
+
+        return rotated_img, ner_annotations  # Return updated image and annotations`
         
 
     def generate_document(self):
@@ -1629,6 +1687,7 @@ class GenerateDocument:
 
         # Randomly select a function
         selected_function = random.choice(list(function_map.keys()))
+        selected_function = self.scientific_publication
         # Call the selected function with its corresponding argument
         GT_json, image = selected_function(function_map[selected_function])
         if image.ndim == 2:  # Grayscale
