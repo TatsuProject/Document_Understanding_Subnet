@@ -134,10 +134,16 @@ class GenerateDocument:
         noisy_image = cv2.add(image_cv, noise)
 
         # Rotate image slightly
-        angle = random.uniform(-5, 5)
-        center = (img_size[0] // 2, img_size[1] // 2)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
 
         # Save NER annotations
         GT_json = {
@@ -173,14 +179,18 @@ class GenerateDocument:
         draw.text((x, y), "BUDGET REPORT", font=title_font, fill="black")
         y += title_font.size + 20
 
-        def add_text(key, content, font_size=25, offset=10):
+        def add_text(key, content, font_size=25, offset=10, return_result=False):
             nonlocal y
             if content is None:
                 return
             font = ImageFont.truetype(random.choice(FONTS), font_size)
             draw.text((x, y), f"{content}", font=font, fill="black")
             bbox = draw.textbbox((x, y), content, font=font)
-            ner_annotations[key] = {"text": content, "bounding_box": list(bbox)}
+            if return_result:
+                y += (bbox[3] - bbox[1]) + offset
+                return {"text": content, "bounding_box": list(bbox)}
+            else:
+                ner_annotations[key] = {"text": content, "bounding_box": list(bbox)}
             y += (bbox[3] - bbox[1]) + offset
 
         add_text("budget_name", metadata["budget_name"], font_size=30)
@@ -191,8 +201,8 @@ class GenerateDocument:
         # Adding allocations
         allocations = []
         for allocation in metadata["allocations"]:
-            category_bbox = add_text("category", allocation["category"], font_size=22, offset=5)
-            amount_bbox = add_text("amount", f"${allocation['amount']}", font_size=22, offset=15)
+            category_bbox = add_text("category", allocation["category"], font_size=22, offset=5, return_result=True)
+            amount_bbox = add_text("amount", f"${allocation['amount']}", font_size=22, offset=15, return_result=True)
             allocations.append({"category": category_bbox, "amount": amount_bbox})
         
         ner_annotations["allocations"] = allocations
@@ -200,10 +210,16 @@ class GenerateDocument:
         image_cv = np.array(img)
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
-        angle = random.uniform(-5, 5)
-        center = (img_size[0] // 2, img_size[1] // 2)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
 
         GT_json = {"document_class": "budget", "NER": ner_annotations}
         return GT_json, rotated_image
@@ -280,10 +296,16 @@ class GenerateDocument:
         image_cv = np.array(img)
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
-        angle = random.uniform(-5, 5)
-        center = (img_size[0] // 2, img_size[1] // 2)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
 
         GT_json = {
             "document_class": "email",
@@ -381,12 +403,23 @@ class GenerateDocument:
             "tags": tag_boxes
         }
 
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
+
         GT_json = {
             "document_class": "file_folder",
             "NER": ner_annotations
         }
         
-        return GT_json, img
+        return GT_json, rotated_image
 
     def form(self, FONTS):
         IMAGE_SIZES = [(800, 1000), (850, 1100), (900, 1200), (1000, 1300), (1100, 1400), (1200, 1500)]
@@ -466,11 +499,18 @@ class GenerateDocument:
         image_cv = np.array(img)
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
-        angle = random.uniform(-5, 5)
-        matrix = cv2.getRotationMatrix2D((img_size[0] // 2, img_size[1] // 2), angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(gt_json, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
         
-        return {"document_class": "form", "NER": gt_json}, rotated_image
+        return {"document_class": "form", "NER": ner_annotations}, rotated_image
 
 
     def handwritten(self, FONTS):
@@ -509,20 +549,25 @@ class GenerateDocument:
                 y += bbox[3] + offset
 
         # Randomly decide to add names and dates
-        if random.choice([True, False]):
-            add_handwritten_text("person_names", fake.name(), 40)
+        add_handwritten_text("person_names", fake.name(), 40)
         
-        if random.choice([True, False]):
-            add_handwritten_text("dates", fake.date_this_year().strftime("%m/%d/%y"), 30)
+        add_handwritten_text("dates", fake.date_this_year().strftime("%m/%d/%y"), 30)
 
         # Add noise and rotation for realism
         image_cv = np.array(img)
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
         
-        angle = random.uniform(-5, 5)
-        matrix = cv2.getRotationMatrix2D((img_size[0] // 2, img_size[1] // 2), angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
 
         return {"document_class": "handwritten", "NER": ner_annotations}, rotated_image
 
@@ -632,16 +677,17 @@ class GenerateDocument:
 
         # Add noise and rotate
         img = add_noise(img)
-        img = rotate_image(img)
-        image_cv = np.array(img)
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(gt_annotations, angle, img)
+        rotated_image = np.array(rotated_image)
 
         # Save annotations as JSON
         GT_json = {
             "document_class": "invoice",
-            "NER": gt_annotations
+            "NER": ner_annotations
         }
 
-        return GT_json, image_cv
+        return GT_json, rotated_image
 
 
     def letter(self, FONTS):
@@ -714,10 +760,16 @@ class GenerateDocument:
         noise = np.random.normal(0, 0.5, image_cv.shape).astype(np.uint8)
         noisy_image = np.clip(image_cv + noise, 0, 255)
         
-        angle = random.uniform(-5, 5)
-        center = (img_size[0] // 2, img_size[1] // 2)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
         
         # Final GT JSON structure
         GT_json = {
@@ -745,7 +797,7 @@ class GenerateDocument:
             "subject": fake.sentence(nb_words=6),
             "reference_number": fake.uuid4() if random.random() > 0.7 else "",
             "attachments": [fake.word() for _ in range(random.randint(0, 2))],
-            "body": fake.paragraph(nb_sentences=5),
+            "body": "\n".join(fake.sentences(nb=random.randint(5, 7)))
         }
 
         x, y = 50, 50
@@ -775,10 +827,11 @@ class GenerateDocument:
             text_bbox = draw.textbbox((x, y), f"{label}: {content}", font=font)
             bounding_box = [x, y, text_bbox[2], text_bbox[3]]
             
-            if label in ["cc", "attachments"]:
-                ner_annotations[label].append({"text": content, "bounding_box": bounding_box})
-            else:
-                ner_annotations[label] = {"text": content, "bounding_box": bounding_box}
+            if label in ner_annotations:
+                if label in ["cc", "attachments"]:
+                    ner_annotations[label].append({"text": content, "bounding_box": bounding_box})
+                else:
+                    ner_annotations[label] = {"text": content, "bounding_box": bounding_box}
             
             y += text_bbox[3] - text_bbox[1] + offset
         
@@ -793,10 +846,16 @@ class GenerateDocument:
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
         
-        angle = random.uniform(-5, 5)
-        center = (img_size[0] // 2, img_size[1] // 2)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
         
         GT_json = {"document_class": "memo", "NER": ner_annotations}
         return GT_json, rotated_image
@@ -819,7 +878,14 @@ class GenerateDocument:
         }
 
         x, y = 50, 50
-        ner_annotations = []
+        ner_annotations = {
+            "headline": {},
+            "author": {},
+            "date": {},
+            "category": {},
+            "source": {},
+            "content": {}
+        }
 
         title_font = ImageFont.truetype(random.choice(FONTS), 40)
         draw.text((x, y), "NEWS ARTICLE", font=title_font, fill="black")
@@ -833,7 +899,7 @@ class GenerateDocument:
                 text = f"{label}: {content}"
                 draw.text((x, y), text, font=font, fill="black")
                 bbox = draw.textbbox((x, y), text, font=font)
-                ner_annotations.append({"label": label.lower(), "content": content, "bounding_box": bbox})
+                ner_annotations[label.lower()] = {"text": content, "bounding_box": bbox}
                 y += bbox[3] - bbox[1] + offset
 
         add_text("Headline", metadata["headline"], font_size=28, offset=15)
@@ -847,10 +913,16 @@ class GenerateDocument:
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
 
-        angle = random.uniform(-5, 5)
-        center = (img_size[0] // 2, img_size[1] // 2)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
 
         GT_json = {"document_class": "news_article", "NER": ner_annotations}
         
@@ -867,10 +939,9 @@ class GenerateDocument:
         draw.rectangle([border_thickness, border_thickness, img_size[0] - border_thickness, img_size[1] - border_thickness], outline="black", width=border_thickness)
 
         slide_data = {}
-        if random.choice([True, False]):
-            slide_data["slide_title"] = fake.sentence(nb_words=6)
-        if random.choice([True, False]):
-            slide_data["content"] = "\n".join([fake.sentence() for _ in range(random.randint(3, 6))])
+
+        slide_data["slide_title"] = fake.sentence(nb_words=6)
+        slide_data["content"] = "\n".join([fake.sentence() for _ in range(random.randint(3, 6))])
         if random.choice([True, False]):
             slide_data["date"] = fake.date_this_year().strftime("%m/%d/%y")
         if random.choice([True, False]):
@@ -889,7 +960,22 @@ class GenerateDocument:
             if isinstance(content, list):
                 ner_annotations[label].append({"text": content, "bounding_box": [x1, y1, x2, y2]})
             else:
-                ner_annotations[label] = {"text": content, "bounding_box": [x1, y1, x2, y2]}
+                if label == "content":
+                    if ner_annotations[label].get("text", "") and ner_annotations[label].get("bounding_box", []):
+                        ner_annotations[label]["text"] += " " + content
+
+                        # Expand the bounding box to include the new text
+                        prev_x1, prev_y1, prev_x2, prev_y2 = ner_annotations[label]["bounding_box"]
+                        new_x1 = min(prev_x1, x1)
+                        new_y1 = min(prev_y1, y1)
+                        new_x2 = max(prev_x2, x2)
+                        new_y2 = max(prev_y2, y2)
+
+                        ner_annotations[label]["bounding_box"] = [new_x1, new_y1, new_x2, new_y2]
+                    else:
+                        ner_annotations[label] = {"text": content, "bounding_box": [x1, y1, x2, y2]}
+                else:
+                    ner_annotations[label] = {"text": content, "bounding_box": [x1, y1, x2, y2]}
             y = y2 + offset
         
         if "slide_title" in slide_data:
@@ -906,10 +992,16 @@ class GenerateDocument:
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
 
-        angle = random.uniform(-5, 5)
-        center = (img_size[0] // 2, img_size[1] // 2)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
 
         GT_json = {"document_class": "presentation", "NER": ner_annotations}
         return GT_json, rotated_image
@@ -985,10 +1077,16 @@ class GenerateDocument:
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
 
-        angle = random.uniform(-5, 5)
-        center = (img_size[0] // 2, img_size[1] // 2)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
 
         GT_json = {"document_class": "questionnaire", "NER": ner_annotations}
         return GT_json, rotated_image
@@ -1094,10 +1192,16 @@ class GenerateDocument:
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
         
-        angle = random.uniform(-5, 5)
-        center = (img_size[0] // 2, img_size[1] // 2)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(noisy_image, matrix, (img_size[0], img_size[1]), borderMode=cv2.BORDER_REPLICATE)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
         
         GT_json = {"document_class": "resume", "NER": ner_annotations}
         return GT_json, rotated_image
@@ -1185,8 +1289,15 @@ class GenerateDocument:
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.int16)
         noisy_image = np.clip(image_cv + noise, 0, 255).astype(np.uint8)
 
-        angle = random.uniform(-5, 5)
-        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, img)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
         rotated_image = np.array(rotated_image)
 
         GT_json = {
@@ -1264,8 +1375,15 @@ class GenerateDocument:
         image_cv = np.array(img)
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
-        angle = random.uniform(-5, 5)
-        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, img)
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
+        # Rotate image slightly
+        angle = random.uniform(-3, 3)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
         rotated_image = np.array(rotated_image)
         
         GT_json = {"document_class": "scientific_report", "NER": ner_annotations}
@@ -1397,9 +1515,15 @@ class GenerateDocument:
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
 
+        # Convert OpenCV BGR image to RGB format
+        noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
+        # Convert NumPy array to PIL Image
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+
         # Rotate image slightly
         angle = random.uniform(-3, 3)
-        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, img)
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
         image_cv = np.array(rotated_image)
 
         GT_json = {
@@ -1599,6 +1723,8 @@ class GenerateDocument:
 
         def rotate_bbox(bbox):
             """Rotates a bounding box and converts it into an 8-point polygon."""
+            if not bbox:
+                return []
             x1, y1, x2, y2 = bbox  # Original bounding box
 
             # Get all 4 corner points
@@ -1687,7 +1813,6 @@ class GenerateDocument:
 
         # Randomly select a function
         selected_function = random.choice(list(function_map.keys()))
-        selected_function = self.scientific_publication
         # Call the selected function with its corresponding argument
         GT_json, image = selected_function(function_map[selected_function])
         if image.ndim == 2:  # Grayscale
