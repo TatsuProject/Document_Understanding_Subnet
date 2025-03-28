@@ -70,10 +70,14 @@ def calculate_overlap(box1, box2):
     - float: Overlap ratio between the two boxes.
     """
     # Extract coordinates
-    x1_min, y1_min = min(box1[0], box1[6]), min(box1[1], box1[7])
-    x1_max, y1_max = max(box1[2], box1[4]), max(box1[3], box1[5])
-    x2_min, y2_min = min(box2[0], box2[6]), min(box2[1], box2[7])
-    x2_max, y2_max = max(box2[2], box2[4]), max(box2[3], box2[5])
+    if len(box1)==8 and len(box2)==8:
+        x1_min, y1_min = min(box1[0], box1[6]), min(box1[1], box1[7])
+        x1_max, y1_max = max(box1[2], box1[4]), max(box1[3], box1[5])
+        x2_min, y2_min = min(box2[0], box2[6]), min(box2[1], box2[7])
+        x2_max, y2_max = max(box2[2], box2[4]), max(box2[3], box2[5])
+    elif len(box1)==4 and len(box2)==4:
+        x1_min, y1_min, x1_max, y1_max = box1
+        x2_min, y2_min, x2_max, y2_max = box2
     
     # Calculate overlap area
     overlap_x1 = max(x1_min, x2_min)
@@ -88,7 +92,7 @@ def calculate_overlap(box1, box2):
     box1_area = (x1_max - x1_min) * (y1_max - y1_min)
     box2_area = (x2_max - x2_min) * (y2_max - y2_min)
 
-    if box1_area>=2*box1_area:
+    if box1_area>=2*box2_area:
         return 0.0
     
     return overlap_area / max(box1_area, box2_area)
@@ -187,8 +191,17 @@ def doc_class_reward(ground_truth: list, response: ProfileSynapse, Tt: float) ->
     Returns:
     - float: The reward value for the miner.
     """
-    doc_class_detected = str(response.miner_output[0])
-    actual_class = ground_truth[0]
+    if len(response.miner_output)==0:
+        return 0.0
+    if isinstance(response.miner_output[0], str):
+        doc_class_detected = str(response.miner_output[0])
+    elif isinstance(response.miner_output[0], dict) and "document_class" in response.miner_output[0]:
+        doc_class_detected = str(response.miner_output[0]["document_class"])
+
+    if isinstance(ground_truth[0], str):
+        actual_class = ground_truth[0]
+    elif isinstance(ground_truth[0], dict) and "document_class" in ground_truth[0]:
+        actual_class = ground_truth[0]["document_class"]
 
     bt.logging.info(f"*************** Detected Document Class:")
     bt.logging.info(doc_class_detected)
@@ -201,6 +214,98 @@ def doc_class_reward(ground_truth: list, response: ProfileSynapse, Tt: float) ->
     # score = final_score_calculation(tim_score, acc_score)
     score = acc_score/100
     return score
+
+
+def are_keys_same(dict1, dict2):
+    return set(dict1.keys()) == set(dict2.keys())
+
+def doc_parse_basic_unit_reward(detected_dict, actual_dict):
+    """ Computes reward based on string match and bounding box overlap. """
+    try:
+        string_score = hard_match_strings(actual_dict.get("text", ""), detected_dict.get("text", ""), 75.0) / 100
+        bbox_overlapping = (
+            calculate_overlap(detected_dict["bounding_box"], actual_dict["bounding_box"])
+            if "bounding_box" in actual_dict and "bounding_box" in detected_dict
+            and len(actual_dict["bounding_box"]) in [4, 8] and len(detected_dict["bounding_box"]) in [4, 8]
+            else 0.0
+        )
+        return (string_score + bbox_overlapping) / 2
+    except Exception as e:
+        import traceback
+        bt.logging.error(f"{traceback.format_exc()}")
+        bt.logging.error(f"Error in basic unit reward calculation: {e}")
+        return 0.0
+
+def compute_section_score(detected_section, actual_section):
+    """ Recursively computes the score for different sections. """
+    try:
+        # Case 1: Both are dicts with "text"
+        if isinstance(actual_section, dict) and "text" in actual_section and isinstance(detected_section, dict) and "text" in detected_section:
+            return doc_parse_basic_unit_reward(detected_section, actual_section)
+
+        # Case 2: Both are dicts without "text" (nested dictionaries)
+        elif isinstance(actual_section, dict) and isinstance(detected_section, dict):
+            if not are_keys_same(actual_section, detected_section):
+                return 0.0
+            scores = [compute_section_score(detected_section[sub_key], actual_section[sub_key]) for sub_key in actual_section]
+            return sum(scores) / len(scores) if scores else 0.0
+
+        # Case 3: Both are lists
+        elif isinstance(actual_section, list) and isinstance(detected_section, list):
+            if len(actual_section) != len(detected_section):
+                return 0.0
+            scores = []
+            for each_detected_component in detected_section:
+                highest_score = max(
+                    (compute_section_score(each_detected_component, each_actual_component) for each_actual_component in actual_section),
+                    default=0.0
+                )
+                scores.append(highest_score)
+            return sum(scores) / len(scores) if scores else 0.0
+
+    except Exception as e:
+        import traceback
+        bt.logging.error(f"{traceback.format_exc()}")
+        bt.logging.error(f"Error in computing section score: {e}")
+    return 0.0
+
+def doc_parse_reward(ground_truth: list, response: ProfileSynapse, Tt: float) -> float:
+    """
+    Reward function for evaluating miner response.
+
+    Parameters:
+    - ground_truth: List containing the expected parsed response.
+    - response: ProfileSynapse object containing the miner's response.
+    - Tt: Threshold value (not used in function, but can be incorporated).
+
+    Returns:
+    - float: Reward score.
+    """
+    try:
+        if len(response.miner_output)==0:
+            return 0.0
+        doc_parsing_detected = response.miner_output[0].get("NER", {})
+        actual_parsing = ground_truth[0].get("NER", {})
+
+        bt.logging.info(f"*************** Detected Document Parsing:\n{doc_parsing_detected}\n************** End")
+        bt.logging.info(f"*************** Ground Truth:\n{actual_parsing}\n************** End")
+
+        if not are_keys_same(doc_parsing_detected, actual_parsing):
+            return 0.0
+
+        reward_dict = {
+            key: compute_section_score(doc_parsing_detected[key], actual_parsing[key])
+            for key in actual_parsing
+        }
+
+        score = sum(reward_dict.values()) / len(reward_dict) if reward_dict else 0.0
+        return score
+
+    except Exception as e:
+        import traceback
+        bt.logging.error(f"{traceback.format_exc()}")
+        bt.logging.error(f"Error in doc_parse_reward function: {e}")
+        return 0.0
 
 
 def get_rewards(
@@ -225,7 +330,21 @@ def get_rewards(
         return np.array(
             [reward(ground_truth, each_resp, Tt) for each_resp in responses]
         )
+
     elif sub_task_type=="doc-class":
         return np.array(
             [doc_class_reward(ground_truth, each_resp, Tt) for each_resp in responses]
         )
+
+    elif sub_task_type=="doc-parse":
+        scores_array=np.zeros(len(responses))
+        for idx, each_resp in enumerate(responses):
+            if len(ground_truth)>0:
+                classification_score = doc_class_reward([ground_truth[0].get("document_class", "")], each_resp, Tt)
+                parsing_score = doc_parse_reward(ground_truth, each_resp, Tt)
+                weighted_avg_score = 0.3*classification_score + 0.7*parsing_score
+                scores_array[idx]=weighted_avg_score
+            else:
+                scores_array[idx]=0.0
+
+        return scores_array
