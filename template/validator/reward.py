@@ -245,6 +245,9 @@ def compute_section_score(detected_section, actual_section):
 
         # Case 2: Both are dicts without "text" (nested dictionaries)
         elif isinstance(actual_section, dict) and isinstance(detected_section, dict):
+            # Handle empty dictionaries
+            if not actual_section and not detected_section:
+                return 1.0
             if not are_keys_same(actual_section, detected_section):
                 return 0.0
             scores = [compute_section_score(detected_section[sub_key], actual_section[sub_key]) for sub_key in actual_section]
@@ -252,6 +255,9 @@ def compute_section_score(detected_section, actual_section):
 
         # Case 3: Both are lists
         elif isinstance(actual_section, list) and isinstance(detected_section, list):
+            # Handle empty lists
+            if not actual_section and not detected_section:
+                return 1.0
             if len(actual_section) != len(detected_section):
                 return 0.0
             scores = []

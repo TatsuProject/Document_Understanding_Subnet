@@ -32,6 +32,7 @@ import sys
 import os
 from io import BytesIO
 import random
+from itertools import cycle
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -39,15 +40,15 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 from template.validator.data_generation.checkbox_generator import GenerateCheckboxTextPair
 from template.validator.data_generation.document_generator import GenerateDocument
 
+available_tasks = ["checkbox", "doc-class", "doc-parse"]
+task_generator = cycle(available_tasks)
+
 def get_random_image():
     _id = str(uuid.uuid4())
     checkbox_data_generator_object = GenerateCheckboxTextPair("", _id)
     document_generator_object = GenerateDocument("", _id)
 
-    available_tasks = ["checkbox", "doc-class", "doc-parse"]
-
-
-    finalized_task = random.choice(available_tasks)
+    finalized_task = next(task_generator)
     bt.logging.info(f"########### sub task type: {finalized_task}")
 
     if finalized_task in ["doc-class", "doc-parse"]:
