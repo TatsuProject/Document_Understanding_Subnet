@@ -72,7 +72,7 @@ To set up the Document Understanding project:
    sudo apt-get install tesseract-ocr
    ```
 
-4. **Install the YOLO Checkbox Service (for miners only):**  
+4. **Install and run AI models (for miners only):**  
    Follow the steps in the link below to install the service:  
    ```bash
    https://github.com/TatsuProject/document_insights_base_model 
