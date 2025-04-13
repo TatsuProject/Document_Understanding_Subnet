@@ -6,8 +6,8 @@ The Document Understanding Subnet is a decentralized system built for advanced d
 ### Key Capabilities:
 1. **Checkbox and Associated Text Detection** - Currently live and operational on SN-84, outperforming industry standards like GPT-4 Vision and Azure Form Recognizer.
 2. **Highlighted and Encircled Text Detection** - Detects and extracts highlighted or circled text segments accurately (Under Development).
-3. **Document Classification** - Automatically identifies document types (e.g., receipts, forms, letters). Live on SN-84. Donut model is being used which is OCR-free SOTA model.
-4. **Document Parsing** - Extracts key details such as names, addresses, phone numbers, and costs using powerful LLMs. Divides the document into sections for clear understanding. Live on SN-84.
+3. **Document Classification** - Automatically classifies documents by type (e.g., receipts, forms, letters). This feature is live on SN-84 and powered by the Donut model, a cutting-edge, OCR-free architecture.
+4. **Document Parsing** - Leverages powerful LLMs to extract key entities like names, addresses, phone numbers, and monetary values. Documents are intelligently segmented into logical sections for improved clarity. Live on SN-84.
 5. **JSON Data Structuring** - Compiles and formats extracted data into a concise, readable JSON file, significantly reducing document review time.
 
 
