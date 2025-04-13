@@ -1,17 +1,14 @@
 
 # Document Understanding 
 
-The **Document Understanding Subnet** is a pioneering, decentralized system dedicated to advanced document understanding tasks, designed to streamline document processing. Leveraging a multi-model architecture of vision, text models, and OCR engines, it aims to set a new standard in document comprehension while providing an open and accessible alternative to proprietary solutions.
+The Document Understanding Subnet is a decentralized system built for advanced document processing tasks. It combines multiple AI models—including vision models, language models, vision-language models (VLMs), and OCR engines—to accurately understand and extract information from documents. This subnet aims to offer a powerful, open-source alternative to proprietary tools, making document comprehension more accessible and efficient. By delivering key insights with a single click, it significantly reduces the time and effort required for document review.
 
-### Key Capabilities in Development:
-1. **Checkbox and Associated Text Detection** - Currently live and operational on SN-54, outperforming industry standards like GPT-4 Vision and Azure Form Recognizer.
-2. **Highlighted and Encircled Text Detection** - Detects and extracts highlighted or circled text segments accurately.
-3. **Document Classification** - Automatically identifies document types (e.g., receipts, forms, letters).
-4. **Entity Detection** - Extracts key details such as names, addresses, phone numbers, and costs.
+### Key Capabilities:
+1. **Checkbox and Associated Text Detection** - Currently live and operational on SN-84, outperforming industry standards like GPT-4 Vision and Azure Form Recognizer.
+2. **Highlighted and Encircled Text Detection** - Detects and extracts highlighted or circled text segments accurately (Under Development).
+3. **Document Classification** - Automatically identifies document types (e.g., receipts, forms, letters). Live on SN-84. Donut model is being used which is OCR-free SOTA model.
+4. **Document Parsing** - Extracts key details such as names, addresses, phone numbers, and costs using powerful LLMs. Divides the document into sections for clear understanding. Live on SN-84.
 5. **JSON Data Structuring** - Compiles and formats extracted data into a concise, readable JSON file, significantly reducing document review time.
-
-This system will bring efficiency to document processing workflows by combining these capabilities, enabling faster, more efficient, and decentralized document analysis. Currently, checkbox and associated text detection are fully operational on Testnet, with additional features in development.
-
 
 
 ## Table of Contents
@@ -28,22 +25,31 @@ This system will bring efficiency to document processing workflows by combining 
 The system consists of two primary components:
 
 1. **Validator**
-   - Equipped with a **Dataset with Ground Truths**:
-     - The validator randomly selects an image along with its corresponding ground truth data.
+   - Equipped with synthetic data generation:
+     - The validator first decide the task out of three: "checkbox", "doc-class", "doc-parse" 
+     - Then validator randomly generates an image along with its corresponding ground truth data related to the decided task.
      - This image is then sent to the miner for processing.
 
 2. **Miner**
-   - **Vision Model**: Processes the image to detect checkboxes, returning their coordinates.
-   - **OCR Engine and Preprocessor**: Extracts text from the image, organizes it into lines, and records the coordinates for each line.
-   - **Post-Processor**: Integrates the checkbox and text coordinates to associate text with each checkbox.
+   - checkbox
+      - **Vision Model**: Processes the image to detect checkboxes, returning their coordinates.
+      - **OCR Engine and Preprocessor**: Extracts text from the image, organizes it into lines, and records the coordinates for each line.
+      - **Post-Processor**: Integrates the checkbox and text coordinates to associate text with each checkbox.
+   - doc-class
+      - **VLM (Donut)**: Processes the image to find out the class of the document. No OCR/postprocessor needed here.
+   - doc-parse
+      - **OCR Engine**: Extracts text from the image, organizes it into lines.
+      - **LLMs**: are used to carefully analyze the text, parse them into main sections, fill the sections with necessary information.
 
 ## Reward Mechanism
 
-1. The **Validator** retrieves an image and its ground truth, keeping the ground truth file and sending the image to the miner.
-2. The **Miner** processes the image using models and a post-processor, then returns the output to the validator.
+1. The **Validator** generates an image and its ground truth, keeping the ground truth file and sending the image to the miner.
+2. The **Miner** processes the image using models and post-processors, then returns the output to the validator.
 3. The **Validator** evaluates the result based on:
-   - **Time Efficiency**: Scores the miner based on processing time, benchmarked against a low-end machine (8 GB RAM, dual-core).
-   - **Accuracy**: Scores based on the overlap of detected checkbox and text coordinates with the ground truth, along with text content matching.
+   - **Accuracy**: Scores based on the
+      - overlap of detected bounding box coordinates with the ground truth,
+      - and text content matching.
+   - Validator then rewards top performing miner when it is 5% better than the second best miner.
 
 ## Installation
 
@@ -69,7 +75,7 @@ To set up the Document Understanding project:
 4. **Install the YOLO Checkbox Service (for miners only):**  
    Follow the steps in the link below to install the service:  
    ```bash
-   https://github.com/TatsuProject/yolo_checkbox_detector
+   https://github.com/TatsuProject/document_insights_base_model 
    ```
    After installation, ensure the service is running on the same machine as the miner.
 
