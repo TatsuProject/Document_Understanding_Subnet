@@ -216,54 +216,106 @@ class BaseValidatorNeuron(BaseNeuron):
 
     def set_weights(self):
         """
-        Sets the validator weights to the metagraph hotkeys based on the scores it has received from the miners. The weights determine the trust and incentive level the validator assigns to miner nodes on the network.
+        Custom weight-setting function:
+        - Rewards only the top miner if they outperform the second-best by 5%.
+        - If the same miner gets rewarded for 5 consecutive tempos, and still is on top, redirect emission to UID 0 (subnet).
         """
+        top_reward_threshold = 0.05
+        max_consecutive_rewards = 5
 
-        # Check if self.scores contains any NaN values and log a warning if it does.
         if np.isnan(self.scores).any():
-            bt.logging.warning(
-                f"Scores contain NaN values. This may be due to a lack of responses from miners, or a bug in your reward functions."
-            )
+            bt.logging.warning("Scores contain NaN values.")
 
-        # Calculate the average reward for each uid across non-zero values.
-        # Replace any NaN values with 0.
-        # Compute the norm of the scores
         norm = np.linalg.norm(self.scores, ord=1, axis=0, keepdims=True)
-
-        # Check if the norm is zero or contains NaN values
         if np.any(norm == 0) or np.isnan(norm).any():
-            norm = np.ones_like(norm)  # Avoid division by zero or NaN
+            norm = np.ones_like(norm)
 
-        # Compute raw_weights safely
         raw_weights = self.scores / norm
+        scores_flat = raw_weights.flatten()
+        uids = self.metagraph.uids.tolist()
 
-        bt.logging.trace(f"raw_weights, {raw_weights}")
-        bt.logging.trace("raw_weight_uids", str(self.metagraph.uids.tolist()))
-        # Process the raw weights to final_weights via subtensor limitations.
+        # Sort by score descending
+        sorted_indices = np.argsort(scores_flat)[::-1]
+        top_uid = uids[sorted_indices[0]]
+        top_score = scores_flat[sorted_indices[0]]
+
+        if len(sorted_indices) > 1:
+            second_score = scores_flat[sorted_indices[1]]
+            top_reward_threshold = 0.05 if (1-second_score)>=0.051 else 0.999-second_score
+        else:
+            second_score = 0.0
+            top_reward_threshold = 1.0
+
+        score_gap = (top_score - second_score) / (second_score + 1e-9)
+
+        bt.logging.debug(f"Top UID: {top_uid}, Score: {top_score}")
+        bt.logging.debug(f"Second Score: {second_score}, Gap: {score_gap:.2%}")
+
+        # Track history of top UIDs
+        if not hasattr(self, "top_miner_history"):
+            self.top_miner_history = []
+
+        reward_this_round = False
+        send_to_subnet = False
+
+        if score_gap >= top_reward_threshold:
+            self.top_miner_history.append(top_uid)
+
+            # Only keep history of last max_consecutive_rewards + 1
+            self.top_miner_history = self.top_miner_history[-(max_consecutive_rewards + 1):]
+
+            # Check if top_uid was top for past max_consecutive_rewards tempos
+            if self.top_miner_history.count(top_uid) == max_consecutive_rewards:
+                if all(uid == top_uid for uid in self.top_miner_history[-max_consecutive_rewards:]):
+                    # Check 7th time
+                    if len(self.top_miner_history) >= max_consecutive_rewards + 1 and self.top_miner_history[-1] == top_uid:
+                        bt.logging.warning(
+                            f"Miner {top_uid} has been top for {max_consecutive_rewards + 1} tempos. Sending reward to subnet."
+                        )
+                        send_to_subnet = True
+                    else:
+                        reward_this_round = True
+                else:
+                    reward_this_round = True
+            else:
+                reward_this_round = True
+
+        if reward_this_round:
+            final_uids = [top_uid]
+            final_weights = [1.0]
+            bt.logging.info(f"Rewarding top miner: UID {top_uid} with weight 1.0")
+        elif send_to_subnet:
+            final_uids = [0]
+            final_weights = [1.0]
+            bt.logging.info("Sending emission to UID 0 (subnet)")
+        else:
+            final_uids = [0]
+            final_weights = [1.0]
+            bt.logging.info("Both Conditions are not met. Sending emission to UID 0 (subnet)")
+
+        # Process final weights through Bittensor utilities
         (
             processed_weight_uids,
             processed_weights,
         ) = process_weights_for_netuid(
-            uids=self.metagraph.uids,
-            weights=raw_weights,
+            uids=final_uids,
+            weights=final_weights,
             netuid=self.config.netuid,
             subtensor=self.subtensor,
             metagraph=self.metagraph,
         )
-        bt.logging.trace(f"processed_weights, {processed_weights}")
-        bt.logging.trace(f"processed_weight_uids, {processed_weight_uids}")
 
-        # Convert to uint16 weights and uids.
         (
             uint_uids,
             uint_weights,
         ) = convert_weights_and_uids_for_emit(
-            uids=processed_weight_uids, weights=processed_weights
+            uids=processed_weight_uids,
+            weights=processed_weights,
         )
-        bt.logging.debug("uint_weights", uint_weights)
-        bt.logging.debug("uint_uids", uint_uids)
 
-        # Set the weights on chain via our subtensor connection.
+        bt.logging.debug(f"Final uint_uids: {uint_uids}")
+        bt.logging.debug(f"Final uint_weights: {uint_weights}")
+
         result, msg = self.subtensor.set_weights(
             wallet=self.wallet,
             netuid=self.config.netuid,
@@ -273,10 +325,12 @@ class BaseValidatorNeuron(BaseNeuron):
             wait_for_inclusion=False,
             version_key=self.spec_version,
         )
+
         if result is True:
             bt.logging.info("set_weights on chain successfully!")
         else:
             bt.logging.error("set_weights failed", msg)
+
 
     def resync_metagraph(self):
         """Resyncs the metagraph and updates the hotkeys and moving averages based on the new metagraph."""
