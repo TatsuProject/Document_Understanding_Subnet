@@ -241,12 +241,13 @@ class BaseValidatorNeuron(BaseNeuron):
 
         if len(sorted_indices) > 1:
             second_score = scores_flat[sorted_indices[1]]
-            top_reward_threshold = 0.05 if (1-second_score)>=0.051 else 0.999-second_score
+            top_reward_threshold = 0.05 if (1.0-second_score)>=0.051 else 0.999-second_score
         else:
             second_score = 0.0
-            top_reward_threshold = 1.0
+            top_reward_threshold = 0.999
 
-        score_gap = (top_score - second_score) / (second_score + 1e-9)
+        # calculating gap between top miner and second best miner
+        score_gap = top_score - second_score
 
         bt.logging.debug(f"Top UID: {top_uid}, Score: {top_score}")
         bt.logging.debug(f"Second Score: {second_score}, Gap: {score_gap:.2%}")
@@ -280,25 +281,32 @@ class BaseValidatorNeuron(BaseNeuron):
             else:
                 reward_this_round = True
 
+        # Start with all zero weights
+        final_weights = np.zeros(len(uids))
+
         if reward_this_round:
-            final_uids = [top_uid]
-            final_weights = [1.0]
+            final_weights[uids.index(top_uid)] = 1.0
             bt.logging.info(f"Rewarding top miner: UID {top_uid} with weight 1.0")
+
         elif send_to_subnet:
-            final_uids = [0]
-            final_weights = [1.0]
-            bt.logging.info("Sending emission to UID 0 (subnet)")
+            if 0 in uids:
+                final_weights[uids.index(0)] = 1.0
+                bt.logging.info("Sending emission to UID 0 (subnet)")
+            else:
+                bt.logging.warning("UID 0 (subnet) not in metagraph. Emission skipped.")
         else:
-            final_uids = [0]
-            final_weights = [1.0]
-            bt.logging.info("Both Conditions are not met. Sending emission to UID 0 (subnet)")
+            if 0 in uids:
+                final_weights[uids.index(0)] = 1.0
+                bt.logging.info("Both conditions not met. Sending emission to UID 0 (subnet)")
+            else:
+                bt.logging.warning("UID 0 (subnet) not in metagraph. Emission skipped.")
 
         # Process final weights through Bittensor utilities
         (
             processed_weight_uids,
             processed_weights,
         ) = process_weights_for_netuid(
-            uids=final_uids,
+            uids=self.metagraph.uids,
             weights=final_weights,
             netuid=self.config.netuid,
             subtensor=self.subtensor,
