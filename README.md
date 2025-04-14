@@ -1,7 +1,7 @@
 
-# Document Understanding 
+# Docs-Insights Subnet 
 
-The Document Understanding Subnet is a decentralized system built for advanced document processing tasks. It combines multiple AI models—including vision models, language models, vision-language models (VLMs), and OCR engines—to accurately understand and extract information from documents. This subnet aims to offer a powerful, open-source alternative to proprietary tools, making document comprehension more accessible and efficient. By delivering key insights with a single click, it significantly reduces the time and effort required for document review.
+The Docs-Insights is a decentralized system built for advanced document processing tasks. It combines multiple AI models—including vision models, language models, vision-language models (VLMs), and OCR engines—to accurately understand and extract information from documents. This subnet aims to offer a powerful, open-source alternative to proprietary tools, making document comprehension more accessible and efficient. By delivering key insights with a single click, it significantly reduces the time and effort required for document review.
 
 ### Key Capabilities:
 1. **Checkbox and Associated Text Detection** - Currently live and operational on SN-84, outperforming industry standards like GPT-4 Vision and Azure Form Recognizer.
@@ -97,12 +97,12 @@ To set up the Document Understanding project:
 
 1. **Start the Validator:**
    ```bash
-   python3 neurons/validator.py --netuid -- --subtensor.network finney --wallet.name validator --wallet.hotkey default --logging.debug 
+   python3 neurons/validator.py --netuid 84 --subtensor.network finney --wallet.name validator --wallet.hotkey default --logging.debug 
    ```
 
 2. **Start the Miner:**
    ```bash
-   python3 neurons/miner.py --netuid -- --subtensor.network finney --wallet.name miner --wallet.hotkey default --logging.debug 
+   python3 neurons/miner.py --netuid 84 --subtensor.network finney --wallet.name miner --wallet.hotkey default --logging.debug 
    ```
 
 
