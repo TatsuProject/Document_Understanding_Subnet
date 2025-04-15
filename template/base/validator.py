@@ -271,6 +271,7 @@ class BaseValidatorNeuron(BaseNeuron):
                     bt.logging.warning(
                         f"Miner {top_uid} has been top for {max_consecutive_rewards} consecutive tempos. Sending reward to subnet."
                     )
+                    self.top_miner_history = []
                     send_to_subnet = True
                 else:
                     reward_this_round = True
