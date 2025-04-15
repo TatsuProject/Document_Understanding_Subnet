@@ -262,24 +262,22 @@ class BaseValidatorNeuron(BaseNeuron):
         if score_gap >= top_reward_threshold:
             self.top_miner_history.append(top_uid)
 
-            # Only keep history of last max_consecutive_rewards + 1
+            # Keep only last N entries
             self.top_miner_history = self.top_miner_history[-(max_consecutive_rewards + 1):]
 
-            # Check if top_uid was top for past max_consecutive_rewards tempos
-            if self.top_miner_history.count(top_uid) == max_consecutive_rewards:
+            # Check if same miner was top in last 5 rounds
+            if len(self.top_miner_history) >= max_consecutive_rewards:
                 if all(uid == top_uid for uid in self.top_miner_history[-max_consecutive_rewards:]):
-                    # Check 7th time
-                    if len(self.top_miner_history) >= max_consecutive_rewards + 1 and self.top_miner_history[-1] == top_uid:
-                        bt.logging.warning(
-                            f"Miner {top_uid} has been top for {max_consecutive_rewards + 1} tempos. Sending reward to subnet."
-                        )
-                        send_to_subnet = True
-                    else:
-                        reward_this_round = True
+                    bt.logging.warning(
+                        f"Miner {top_uid} has been top for {max_consecutive_rewards} consecutive tempos. Sending reward to subnet."
+                    )
+                    send_to_subnet = True
                 else:
                     reward_this_round = True
             else:
                 reward_this_round = True
+        else:
+            bt.logging.info("No miner exceeded threshold gap. Emission skipped or goes to subnet.")
 
         # Start with all zero weights
         final_weights = np.zeros(len(uids))
@@ -336,6 +334,7 @@ class BaseValidatorNeuron(BaseNeuron):
 
         if result is True:
             bt.logging.info("set_weights on chain successfully!")
+            bt.logging.info(f"Top miner history: {self.top_miner_history}")
         else:
             bt.logging.error("set_weights failed", msg)
 
