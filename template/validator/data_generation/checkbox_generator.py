@@ -4,7 +4,7 @@
 # ================================================== data generation ==============================================================
 import random
 import json
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 from math import floor
 import io
 import numpy as np
@@ -21,6 +21,13 @@ class GenerateCheckboxTextPair:
     def __init__(self, url, uid):
         self.url = ""
         self.uid = uid
+        self.text_color = random.choice([
+            (70, 68, 66), (55, 58, 65), (72, 64, 60), (63, 55, 70),
+            (67, 72, 62), (58, 66, 72), (75, 60, 65), (65, 58, 73),
+            (68, 63, 57), (73, 70, 62)
+        ])
+        self.checkbox_color = self.text_color
+        self.font = ""
 
     def generate_scanned_document(self):
 
@@ -62,8 +69,10 @@ class GenerateCheckboxTextPair:
                     ImageFont.truetype(os.path.join(script_dir, "fonts/Vera.ttf"), text_size),
                     ImageFont.truetype(os.path.join(script_dir, "fonts/Verdana_Bold_Italic.ttf"), text_size),
                     ImageFont.truetype(os.path.join(script_dir, "fonts/Verdana.ttf"), text_size),
-                    ImageFont.truetype(os.path.join(script_dir, "fonts/DejaVuSansMono-Bold.ttf"), text_size)
+                    ImageFont.truetype(os.path.join(script_dir, "fonts/DejaVuSansMono-Bold.ttf"), text_size),
+                    ImageFont.truetype(os.path.join(script_dir, "handwritten_fonts/Mayonice.ttf"), text_size)
                 ])
+                self.font=font
             except IOError:
                 font = ImageFont.load_default()  # Default font
             
@@ -83,7 +92,7 @@ class GenerateCheckboxTextPair:
                         used_centre.append((x, y))
                         break
 
-                draw.text((x, y), text, fill="black", font=font)
+                draw.text((x, y), text, fill=self.text_color, font=font)
 
             bt.logging.info(f"[{self.uid}] Document Generated Successfully!")
             return image
@@ -116,11 +125,6 @@ class GenerateCheckboxTextPair:
         return None, None  # No empty region found
 
     def get_random_metadata(self):
-        text_color = random.choice([
-            (70, 68, 66), (55, 58, 65), (72, 64, 60), (63, 55, 70),
-            (67, 72, 62), (58, 66, 72), (75, 60, 65), (65, 58, 73),
-            (68, 63, 57), (73, 70, 62)
-        ])
         
         checkbox_text_size = random.choice([
             (20, 10), (22, 11), (24, 12), (26, 13), (28, 14), (30, 15), (32, 16), (34, 18), (36, 20) 
@@ -129,80 +133,89 @@ class GenerateCheckboxTextPair:
         padding = random.choice([6, 7, 8, 9, 10])
         
         checkbox_stroke = random.choice([2, 3, 4, 5])
-
-        fonts = random.choice([
-            ImageFont.truetype(os.path.join(script_dir, "fonts/Arial.ttf"), checkbox_text_size[1]),
-            ImageFont.truetype(os.path.join(script_dir, "fonts/Arial_Bold_Italic.ttf"), checkbox_text_size[1]),
-            ImageFont.truetype(os.path.join(script_dir, "fonts/Courier_New.ttf"), checkbox_text_size[1]),
-            ImageFont.truetype(os.path.join(script_dir, "fonts/DroidSans-Bold.ttf"), checkbox_text_size[1]),
-            ImageFont.truetype(os.path.join(script_dir, "fonts/FiraMono-Regular.ttf"), checkbox_text_size[1]),
-            ImageFont.truetype(os.path.join(script_dir, "fonts/Times New Roman.ttf"), checkbox_text_size[1]),
-            ImageFont.truetype(os.path.join(script_dir, "fonts/Vera.ttf"), checkbox_text_size[1]),
-            ImageFont.truetype(os.path.join(script_dir, "fonts/Verdana_Bold_Italic.ttf"), checkbox_text_size[1]),
-            ImageFont.truetype(os.path.join(script_dir, "fonts/Verdana.ttf"), checkbox_text_size[1]),
-            ImageFont.truetype(os.path.join(script_dir, "fonts/DejaVuSansMono-Bold.ttf"), checkbox_text_size[1])
-        ])
         
         return {
-            "text_color": text_color,
+            "text_color": self.text_color,
             "checkbox_text_size": checkbox_text_size,
             "padding": padding,
             "checkbox_stroke": checkbox_stroke,
-            "font": fonts
+            "font": self.font
         }
 
-    def draw_random_checkbox(self, draw, x, y, checkbox_size, checkbox_color):
+    def draw_random_checkbox(self, draw, x, y, checkbox_size, checkbox_color, shape_drawn):
         """
         Draws a random tick or cross with slight imperfections to simulate natural human checks.
         """
         # Randomly decide whether to draw a tick or a cross
         fill_checkbox = random.choice([True, False])
         if fill_checkbox:
-            if random.choice([True, False]):  # Draw tick
-                tick_variation = random.randint(1, 5)
-                
-                if tick_variation == 1:  # Basic tick
-                    draw.line((x, y + checkbox_size // 2, x + checkbox_size // 2, y + checkbox_size), fill=checkbox_color, width=2)
-                    draw.line((x + checkbox_size // 2, y + checkbox_size, x + checkbox_size, y), fill=checkbox_color, width=2)
-                
-                elif tick_variation == 2:  # Slightly imperfect tick
-                    draw.line((x + random.randint(-2, 2), y + checkbox_size // 2, x + checkbox_size // 2 + random.randint(-2, 2), y + checkbox_size), fill=checkbox_color, width=2)
-                    draw.line((x + checkbox_size // 2 + random.randint(-2, 2), y + checkbox_size, x + checkbox_size + random.randint(-2, 2), y), fill=checkbox_color, width=2)
-                
-                elif tick_variation == 3:  # Off-center tick
-                    draw.line((x + random.randint(0, 2), y + checkbox_size // 2, x + checkbox_size // 2 + 2, y + checkbox_size - 3), fill=checkbox_color, width=2)
-                    draw.line((x + checkbox_size // 2, y + checkbox_size, x + checkbox_size - 2, y - 3), fill=checkbox_color, width=2)
-                
-                elif tick_variation == 4:  # Tilted tick
-                    draw.line((x, y + checkbox_size // 2, x + checkbox_size // 3, y + checkbox_size + 2), fill=checkbox_color, width=2)
-                    draw.line((x + checkbox_size // 3, y + checkbox_size, x + checkbox_size, y - 1), fill=checkbox_color, width=2)
-                
-                elif tick_variation == 5:  # Tick going slightly out of the box
-                    draw.line((x - 1, y + checkbox_size // 2, x + checkbox_size // 2, y + checkbox_size + 2), fill=checkbox_color, width=2)
-                    draw.line((x + checkbox_size // 2, y + checkbox_size + 1, x + checkbox_size + 2, y - 1), fill=checkbox_color, width=2)
+            if shape_drawn == "rectangle":
+                if random.choice([True, False]):  # Draw tick
+                    line_width = random.randint(2, 4)
+                    tick_variation = random.randint(1, 5)
+                    
+                    if tick_variation == 1:  # Basic tick
+                        draw.line((x, y + checkbox_size // 2, x + checkbox_size // 2, y + checkbox_size), fill=checkbox_color, width=line_width)
+                        draw.line((x + checkbox_size // 2, y + checkbox_size, x + checkbox_size, y), fill=checkbox_color, width=line_width)
+                    
+                    elif tick_variation == 2:  # Slightly imperfect tick
+                        draw.line((x + random.randint(-2, 2), y + checkbox_size // 2, x + checkbox_size // 2 + random.randint(-2, 2), y + checkbox_size), fill=checkbox_color, width=line_width)
+                        draw.line((x + checkbox_size // 2 + random.randint(-2, 2), y + checkbox_size, x + checkbox_size + random.randint(-2, 2), y), fill=checkbox_color, width=line_width)
+                    
+                    elif tick_variation == 3:  # Off-center tick
+                        draw.line((x + random.randint(0, 2), y + checkbox_size // 2, x + checkbox_size // 2 + 2, y + checkbox_size - 3), fill=checkbox_color, width=line_width)
+                        draw.line((x + checkbox_size // 2, y + checkbox_size, x + checkbox_size - 2, y - 3), fill=checkbox_color, width=line_width)
+                    
+                    elif tick_variation == 4:  # Tilted tick
+                        draw.line((x, y + checkbox_size // 2, x + checkbox_size // 3, y + checkbox_size + 2), fill=checkbox_color, width=line_width)
+                        draw.line((x + checkbox_size // 3, y + checkbox_size, x + checkbox_size, y - 1), fill=checkbox_color, width=line_width)
+                    
+                    elif tick_variation == 5:  # Tick going slightly out of the box
+                        draw.line((x - 1, y + checkbox_size // 2, x + checkbox_size // 2, y + checkbox_size + 2), fill=checkbox_color, width=line_width)
+                        draw.line((x + checkbox_size // 2, y + checkbox_size + 1, x + checkbox_size + 2, y - 1), fill=checkbox_color, width=line_width)
 
-            else:  # Draw cross
-                cross_variation = random.randint(1, 5)
+                else:  # Draw cross
+                    line_width = random.randint(2, 4)
+                    cross_variation = random.randint(1, 5)
+                    
+                    if cross_variation == 1:  # Basic cross
+                        draw.line((x, y, x + checkbox_size, y + checkbox_size), fill=checkbox_color, width=line_width)
+                        draw.line((x + checkbox_size, y, x, y + checkbox_size), fill=checkbox_color, width=line_width)
+                    
+                    elif cross_variation == 2:  # Slightly imperfect cross
+                        draw.line((x + random.randint(-2, 2), y, x + checkbox_size + random.randint(-2, 2), y + checkbox_size), fill=checkbox_color, width=line_width)
+                        draw.line((x + checkbox_size + random.randint(-2, 2), y, x + random.randint(-2, 2), y + checkbox_size), fill=checkbox_color, width=line_width)
+                    
+                    elif cross_variation == 3:  # Cross tilted outward
+                        draw.line((x - 1, y - 1, x + checkbox_size + 1, y + checkbox_size + 1), fill=checkbox_color, width=line_width)
+                        draw.line((x + checkbox_size + 1, y - 1, x - 1, y + checkbox_size + 1), fill=checkbox_color, width=line_width)
+                    
+                    elif cross_variation == 4:  # Cross slightly going out of the box
+                        draw.line((x - 1, y, x + checkbox_size + 2, y + checkbox_size), fill=checkbox_color, width=2)
+                        draw.line((x + checkbox_size + 2, y - 1, x - 2, y + checkbox_size + 1), fill=checkbox_color, width=line_width)
+                    
+                    elif cross_variation == 5:  # Irregular cross with random shifts
+                        draw.line((x + random.randint(-2, 2), y + random.randint(-2, 2), x + checkbox_size + random.randint(-2, 2), y + checkbox_size + random.randint(-2, 2)), fill=checkbox_color, width=line_width)
+                        draw.line((x + checkbox_size + random.randint(-2, 2), y + random.randint(-2, 2), x + random.randint(-2, 2), y + checkbox_size + random.randint(-2, 2)), fill=checkbox_color, width=line_width)
+            
+            elif shape_drawn == "circle":
+                fill_task = random.choice(["full", "inner"])
+
+                if fill_task == "full":
+                    draw.ellipse(checkbox_coords, fill=checkbox_color)
                 
-                if cross_variation == 1:  # Basic cross
-                    draw.line((x, y, x + checkbox_size, y + checkbox_size), fill=checkbox_color, width=2)
-                    draw.line((x + checkbox_size, y, x, y + checkbox_size), fill=checkbox_color, width=2)
-                
-                elif cross_variation == 2:  # Slightly imperfect cross
-                    draw.line((x + random.randint(-2, 2), y, x + checkbox_size + random.randint(-2, 2), y + checkbox_size), fill=checkbox_color, width=2)
-                    draw.line((x + checkbox_size + random.randint(-2, 2), y, x + random.randint(-2, 2), y + checkbox_size), fill=checkbox_color, width=2)
-                
-                elif cross_variation == 3:  # Cross tilted outward
-                    draw.line((x - 1, y - 1, x + checkbox_size + 1, y + checkbox_size + 1), fill=checkbox_color, width=2)
-                    draw.line((x + checkbox_size + 1, y - 1, x - 1, y + checkbox_size + 1), fill=checkbox_color, width=2)
-                
-                elif cross_variation == 4:  # Cross slightly going out of the box
-                    draw.line((x - 1, y, x + checkbox_size + 2, y + checkbox_size), fill=checkbox_color, width=2)
-                    draw.line((x + checkbox_size + 2, y - 1, x - 2, y + checkbox_size + 1), fill=checkbox_color, width=2)
-                
-                elif cross_variation == 5:  # Irregular cross with random shifts
-                    draw.line((x + random.randint(-2, 2), y + random.randint(-2, 2), x + checkbox_size + random.randint(-2, 2), y + checkbox_size + random.randint(-2, 2)), fill=checkbox_color, width=2)
-                    draw.line((x + checkbox_size + random.randint(-2, 2), y + random.randint(-2, 2), x + random.randint(-2, 2), y + checkbox_size + random.randint(-2, 2)), fill=checkbox_color, width=2)
+                elif fill_task == "inner":
+                    padding = random.randint(3, 6)
+                    inner_coords = [
+                        x + padding,
+                        y + padding,
+                        x + checkbox_size - padding,
+                        y + checkbox_size - padding
+                    ]
+                    draw.ellipse(inner_coords, fill=checkbox_color)
+            else:
+                pass
+
             return True
         else:
             # Draw 2 or 3 random small dots inside the checkbox
@@ -276,12 +289,70 @@ class GenerateCheckboxTextPair:
         return " ".join(words)
 
 
-    def add_noise(self, image):
-            """Adds random noise to an image."""
-            np_image = np.array(image)
-            noise = np.random.normal(0, 0.5, np_image.shape).astype(np.uint8)
-            noisy_image = np.clip(np_image + noise, 0, 255)
-            return Image.fromarray(noisy_image)
+    def add_grain_noise(self, image):
+        """Adds random noise to an image."""
+        np_image = np.array(image)
+        noise = np.random.normal(0, 0.5, np_image.shape).astype(np.uint8)
+        noisy_image = np.clip(np_image + noise, 0, 255)
+        return Image.fromarray(noisy_image)
+
+
+    def add_noise(self, pil_img):
+        # Convert to grayscale
+        img = pil_img.convert("L")
+        img_np = np.array(img).astype(np.float32)
+
+        h, w = img_np.shape
+
+        # --- 1. Strong Gaussian Noise ---
+        mean = 0
+        stddev = random.uniform(15, 40)  # Increased range
+        noise = np.random.normal(mean, stddev, (h, w))
+        img_np += noise
+
+        # --- 2. Stronger Gradient Light Effect ---
+        for _ in range(random.randint(1, 2)):
+            gradient = np.tile(np.linspace(0, random.randint(10, 60), w), (h, 1))
+            if random.choice([True, False]):
+                gradient = np.flip(gradient, axis=1)
+            img_np += gradient * random.uniform(0.5, 1.5)
+
+        # --- 3. More and Heavier Blotches ---
+        for _ in range(random.randint(5, 10)):
+            cx, cy = random.randint(0, w), random.randint(0, h)
+            radius = random.randint(20, 120)
+            strength = random.randint(20, 60)
+            Y, X = np.ogrid[:h, :w]
+            dist_from_center = np.sqrt((X - cx)**2 + (Y - cy)**2)
+            mask = dist_from_center <= radius
+            img_np[mask] += strength
+
+        # --- 4. Add Horizontal Scanner Lines ---
+        for _ in range(random.randint(5, 10)):
+            y_line = random.randint(0, h - 1)
+            thickness = random.randint(1, 2)
+            intensity = random.randint(10, 40)
+            img_np[y_line:y_line+thickness, :] += intensity
+
+        # --- 5. Clip to valid pixel range ---
+        img_np = np.clip(img_np, 0, 255).astype(np.uint8)
+        img_noisy = Image.fromarray(img_np)
+
+        # --- 6. Subtle Blur ---
+        if random.random() < 0.7:
+            img_noisy = img_noisy.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.7, 1.5)))
+
+        # --- 7. Yellowish Paper Tint ---
+        img_noisy = ImageOps.colorize(img_noisy, black="black", white="#fdfbf0")
+
+        # --- 8. Optional JPEG Compression Artifacts ---
+        if random.random() < 0.7:
+            buffer = io.BytesIO()
+            img_noisy.save(buffer, format="JPEG", quality=random.randint(20, 60))
+            buffer.seek(0)
+            img_noisy = Image.open(buffer)
+
+        return self.add_grain_noise(img_noisy)
 
     def transform_bounding_boxes(self, ner_annotations, angle, image):
         """Transforms bounding boxes inside ner_annotations to 8-point format after rotation."""
@@ -384,10 +455,17 @@ class GenerateCheckboxTextPair:
 
                     # Draw checkbox
                     checkbox_coords = [x, y, x + checkbox_size, y + checkbox_size]
-                    draw.rectangle(checkbox_coords, outline=checkbox_color, width=metadata.get("checkbox_stroke", 2))
+                    shape_drawn = ""
+                    if random.choice([True, False]):
+                        draw.rectangle(checkbox_coords, outline=checkbox_color, width=metadata.get("checkbox_stroke", 2))
+                        shape_drawn = "rectangle"
+                    else:
+                        draw.ellipse(checkbox_coords, outline=checkbox_color, width=metadata.get("checkbox_stroke", 2))
+                        shape_drawn = "circle"
+                    
 
                     # Draw tick or cross within the checkbox
-                    checkbox_filled = self.draw_random_checkbox(draw, x, y, checkbox_size, checkbox_color)
+                    checkbox_filled = self.draw_random_checkbox(draw, x, y, checkbox_size, checkbox_color, shape_drawn)
 
                     text_x, text_y, text_width, text_height = self.put_text_randomly(draw, x, y, checkbox_size, text, font, text_color, width, height, metadata.get("padding", 10))
 
