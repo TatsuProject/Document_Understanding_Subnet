@@ -1702,37 +1702,48 @@ class GenerateDocument:
 
     def other(self, FONTS):
         IMAGE_SIZES = [(1000, 1400), (1200, 1600), (1400, 1800), (1600, 2000), (1800, 2200), (2000, 2400)]
-        DEFAULT_FONT = random.choice(FONTS)  # Not used, but follows your function signature
+        DEFAULT_FONT = random.choice(FONTS)
 
         # Randomly select an image size
         img_size = random.choice(IMAGE_SIZES)
-        image = np.random.randint(0, 256, (img_size[1], img_size[0], 3), dtype=np.uint8)  # Noise background
 
-        # Draw random lines, circles, and shapes
-        for _ in range(random.randint(50, 100)):  # Random number of shapes
-            x1, y1 = random.randint(0, img_size[0]), random.randint(0, img_size[1])
-            x2, y2 = random.randint(0, img_size[0]), random.randint(0, img_size[1])
-            color = tuple(np.random.randint(0, 256, 3).tolist())
-            thickness = random.randint(1, 5)
+        # Create a white background image
+        img = Image.new('RGB', img_size, 'white')
+        draw = ImageDraw.Draw(img)
 
-            shape_type = random.choice(["line", "circle", "rectangle"])
-            if shape_type == "line":
-                cv2.line(image, (x1, y1), (x2, y2), color, thickness)
-            elif shape_type == "circle":
-                radius = random.randint(10, 100)
-                cv2.circle(image, (x1, y1), radius, color, thickness)
-            elif shape_type == "rectangle":
-                cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
+        # Select a font
+        font_size = 28
+        font = ImageFont.truetype(DEFAULT_FONT, font_size)
 
-        # Rotate the image randomly between -45 to 45 degrees
-        angle = random.uniform(-45, 45)
+        # Generate 10–20 random sentences
+        num_sentences = random.randint(10, 20)
+        sentences = [fake.sentence(nb_words=random.randint(6, 12)) for _ in range(num_sentences)]
+
+        # Draw each sentence on a new line
+        x, y = 100, 150
+        for sentence in sentences:
+            draw.text((x, y), sentence, font=font, fill="black")
+            text_bbox = draw.textbbox((x, y), sentence, font=font)
+            line_height = text_bbox[3] - text_bbox[1] + 20
+            y += line_height
+            if y > img_size[1] - 100:
+                break  # Avoid overflow beyond the bottom
+
+        # Convert PIL to OpenCV format
+        image_cv = np.array(img)
+        noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
+        noisy_image = cv2.add(image_cv, noise)
+
+        # Rotate the image randomly between -5 to 5 degrees
+        angle = random.uniform(-5, 5)
         center = (img_size[0] // 2, img_size[1] // 2)
         M = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(image, M, (img_size[0], img_size[1]))
+        rotated_image = cv2.warpAffine(noisy_image, M, (img_size[0], img_size[1]))
 
         # Return empty NER JSON
         GT_json = {"document_class": "other", "NER": {}}
         return GT_json, rotated_image
+
 
 
     def transform_bounding_boxes(self, ner_annotations, angle, image):

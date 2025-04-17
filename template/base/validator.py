@@ -216,12 +216,12 @@ class BaseValidatorNeuron(BaseNeuron):
 
     def set_weights(self):
         """
-        Custom weight-setting function:
-        - Rewards only the top miner if they outperform the second-best by 5%.
-        - If the same miner gets rewarded for 5 consecutive tempos, and still is on top, redirect emission to UID 0 (subnet).
+        Updated weight-setting function:
+        - Proportional rewards if 2+ miners have score >= 0.99
+        - Otherwise, winner-take-all logic with gap threshold and burn mechanism
         """
-        top_reward_threshold = 0.05
-        max_consecutive_rewards = 5
+        top_reward_threshold = 0.08
+        max_consecutive_rewards = 18
 
         if np.isnan(self.scores).any():
             bt.logging.warning("Scores contain NaN values.")
@@ -234,73 +234,85 @@ class BaseValidatorNeuron(BaseNeuron):
         scores_flat = raw_weights.flatten()
         uids = self.metagraph.uids.tolist()
 
-        # Sort by score descending
-        sorted_indices = np.argsort(scores_flat)[::-1]
-        top_uid = uids[sorted_indices[0]]
-        top_score = scores_flat[sorted_indices[0]]
+        # Find UIDs with score >= 0.95
+        high_score_indices = np.where(scores_flat >= 0.95)[0]
+        high_score_uids = [uids[i] for i in high_score_indices]
+        high_scores = scores_flat[high_score_indices]
 
-        if len(sorted_indices) > 1:
-            second_score = scores_flat[sorted_indices[1]]
-            top_reward_threshold = 0.05 if (1.0-second_score)>=0.051 else 0.999-second_score
+        final_weights = np.zeros(len(uids))
+
+        if len(high_score_indices) >= 2:
+            # Proportional reward among high performers
+            total = np.sum(high_scores)
+            for idx, uid in zip(high_score_indices, high_score_uids):
+                weight = scores_flat[idx] / total
+                final_weights[uids.index(uid)] = weight
+
+            bt.logging.info(f"Multiple high scorers (≥0.99): {list(zip(high_score_uids, high_scores))}")
+            bt.logging.info("Distributing emission proportionally among high performers.")
+
         else:
-            second_score = 0.0
-            top_reward_threshold = 0.999
+            # === Fallback to Winner-Take-All Logic ===
 
-        # calculating gap between top miner and second best miner
-        score_gap = top_score - second_score
+            # Sort by score descending
+            sorted_indices = np.argsort(scores_flat)[::-1]
+            top_uid = uids[sorted_indices[0]]
+            top_score = scores_flat[sorted_indices[0]]
 
-        bt.logging.debug(f"Top UID: {top_uid}, Score: {top_score}")
-        bt.logging.debug(f"Second Score: {second_score}, Gap: {score_gap:.2%}")
+            if len(sorted_indices) > 1:
+                second_score = scores_flat[sorted_indices[1]]
+                top_reward_threshold = 0.08 if (0.95 - second_score) >= 0.08 else 0.95 - second_score
+            else:
+                second_score = 0.0
+                top_reward_threshold = 0.99
 
-        # Track history of top UIDs
-        if not hasattr(self, "top_miner_history"):
-            self.top_miner_history = []
+            score_gap = top_score - second_score
 
-        reward_this_round = False
-        send_to_subnet = False
+            bt.logging.debug(f"Top UID: {top_uid}, Score: {top_score}")
+            bt.logging.debug(f"Second Score: {second_score}, Gap: {score_gap:.2%}")
 
-        if score_gap >= top_reward_threshold:
-            self.top_miner_history.append(top_uid)
+            if not hasattr(self, "top_miner_history"):
+                self.top_miner_history = []
 
-            # Keep only last N entries
-            self.top_miner_history = self.top_miner_history[-(max_consecutive_rewards + 1):]
+            reward_this_round = False
+            send_to_subnet = False
 
-            # Check if same miner was top in last 5 rounds
-            if len(self.top_miner_history) >= max_consecutive_rewards:
-                if all(uid == top_uid for uid in self.top_miner_history[-max_consecutive_rewards:]):
-                    bt.logging.warning(
-                        f"Miner {top_uid} has been top for {max_consecutive_rewards} consecutive tempos. Sending reward to subnet."
-                    )
-                    self.top_miner_history = []
-                    send_to_subnet = True
+            if score_gap >= top_reward_threshold:
+                self.top_miner_history.append(top_uid)
+                self.top_miner_history = self.top_miner_history[-(max_consecutive_rewards + 1):]
+
+                if len(self.top_miner_history) >= max_consecutive_rewards:
+                    if all(uid == top_uid for uid in self.top_miner_history[-max_consecutive_rewards:]):
+                        bt.logging.warning(
+                            f"Miner {top_uid} has been top for {max_consecutive_rewards} consecutive tempos. Sending reward to subnet."
+                        )
+                        self.top_miner_history = []
+                        send_to_subnet = True
+                    else:
+                        reward_this_round = True
                 else:
                     reward_this_round = True
             else:
-                reward_this_round = True
-        else:
-            bt.logging.info("No miner exceeded threshold gap. Emission skipped or goes to subnet.")
+                bt.logging.info("No miner exceeded threshold gap. Emission skipped or goes to subnet.")
 
-        # Start with all zero weights
-        final_weights = np.zeros(len(uids))
+            if reward_this_round:
+                final_weights[uids.index(top_uid)] = 1.0
+                bt.logging.info(f"Rewarding top miner: UID {top_uid} with weight 1.0")
 
-        if reward_this_round:
-            final_weights[uids.index(top_uid)] = 1.0
-            bt.logging.info(f"Rewarding top miner: UID {top_uid} with weight 1.0")
-
-        elif send_to_subnet:
-            if 0 in uids:
-                final_weights[uids.index(0)] = 1.0
-                bt.logging.info("Sending emission to UID 0 (subnet)")
+            elif send_to_subnet:
+                if 0 in uids:
+                    final_weights[uids.index(0)] = 1.0
+                    bt.logging.info("Sending emission to UID 0 (subnet)")
+                else:
+                    bt.logging.warning("UID 0 (subnet) not in metagraph. Emission skipped.")
             else:
-                bt.logging.warning("UID 0 (subnet) not in metagraph. Emission skipped.")
-        else:
-            if 0 in uids:
-                final_weights[uids.index(0)] = 1.0
-                bt.logging.info("Both conditions not met. Sending emission to UID 0 (subnet)")
-            else:
-                bt.logging.warning("UID 0 (subnet) not in metagraph. Emission skipped.")
+                if 0 in uids:
+                    final_weights[uids.index(0)] = 1.0
+                    bt.logging.info("Both conditions not met. Sending emission to UID 0 (subnet)")
+                else:
+                    bt.logging.warning("UID 0 (subnet) not in metagraph. Emission skipped.")
 
-        # Process final weights through Bittensor utilities
+        # --- Emit Weights ---
         (
             processed_weight_uids,
             processed_weights,
