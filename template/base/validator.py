@@ -220,7 +220,7 @@ class BaseValidatorNeuron(BaseNeuron):
         - Proportional rewards if 2+ miners have score >= 0.99
         - Otherwise, winner-take-all logic with gap threshold and burn mechanism
         """
-        top_reward_threshold = 0.08
+        top_reward_threshold = 0.05
         max_consecutive_rewards = 18
 
         if np.isnan(self.scores).any():
