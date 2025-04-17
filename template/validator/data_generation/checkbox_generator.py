@@ -142,7 +142,7 @@ class GenerateCheckboxTextPair:
             "font": self.font
         }
 
-    def draw_random_checkbox(self, draw, x, y, checkbox_size, checkbox_color, shape_drawn):
+    def draw_random_checkbox(self, draw, x, y, checkbox_size, checkbox_color, shape_drawn, checkbox_coords):
         """
         Draws a random tick or cross with slight imperfections to simulate natural human checks.
         """
@@ -465,7 +465,7 @@ class GenerateCheckboxTextPair:
                     
 
                     # Draw tick or cross within the checkbox
-                    checkbox_filled = self.draw_random_checkbox(draw, x, y, checkbox_size, checkbox_color, shape_drawn)
+                    checkbox_filled = self.draw_random_checkbox(draw, x, y, checkbox_size, checkbox_color, shape_drawn, checkbox_coords)
 
                     text_x, text_y, text_width, text_height = self.put_text_randomly(draw, x, y, checkbox_size, text, font, text_color, width, height, metadata.get("padding", 10))
 

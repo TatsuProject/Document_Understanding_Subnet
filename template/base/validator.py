@@ -220,7 +220,7 @@ class BaseValidatorNeuron(BaseNeuron):
         - Proportional rewards if 2+ miners have score >= 0.99
         - Otherwise, winner-take-all logic with gap threshold and burn mechanism
         """
-        top_reward_threshold = 0.05
+        top_reward_threshold = 0.10
         max_consecutive_rewards = 18
 
         if np.isnan(self.scores).any():
@@ -230,14 +230,18 @@ class BaseValidatorNeuron(BaseNeuron):
         if np.any(norm == 0) or np.isnan(norm).any():
             norm = np.ones_like(norm)
 
-        raw_weights = self.scores / norm
+        raw_weights = self.scores # / norm
         scores_flat = raw_weights.flatten()
         uids = self.metagraph.uids.tolist()
 
         # Find UIDs with score >= 0.95
-        high_score_indices = np.where(scores_flat >= 0.95)[0]
+        max_threshold = 0.95
+        high_score_indices = np.where(scores_flat >= max_threshold)[0]
         high_score_uids = [uids[i] for i in high_score_indices]
         high_scores = scores_flat[high_score_indices]
+
+        if not hasattr(self, "top_miner_history"):
+            self.top_miner_history = []
 
         final_weights = np.zeros(len(uids))
 
@@ -248,7 +252,7 @@ class BaseValidatorNeuron(BaseNeuron):
                 weight = scores_flat[idx] / total
                 final_weights[uids.index(uid)] = weight
 
-            bt.logging.info(f"Multiple high scorers (≥0.99): {list(zip(high_score_uids, high_scores))}")
+            bt.logging.info(f"Multiple high scorers (≥0.95): {list(zip(high_score_uids, high_scores))}")
             bt.logging.info("Distributing emission proportionally among high performers.")
 
         else:
@@ -261,18 +265,15 @@ class BaseValidatorNeuron(BaseNeuron):
 
             if len(sorted_indices) > 1:
                 second_score = scores_flat[sorted_indices[1]]
-                top_reward_threshold = 0.08 if (0.95 - second_score) >= 0.08 else 0.95 - second_score
+                top_reward_threshold = 0.08 if (max_threshold - second_score) >= 0.08 else max_threshold - second_score
             else:
                 second_score = 0.0
-                top_reward_threshold = 0.99
+                top_reward_threshold = max_threshold
 
             score_gap = top_score - second_score
 
             bt.logging.debug(f"Top UID: {top_uid}, Score: {top_score}")
             bt.logging.debug(f"Second Score: {second_score}, Gap: {score_gap:.2%}")
-
-            if not hasattr(self, "top_miner_history"):
-                self.top_miner_history = []
 
             reward_this_round = False
             send_to_subnet = False
