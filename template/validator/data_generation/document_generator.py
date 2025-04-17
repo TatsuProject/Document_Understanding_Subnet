@@ -545,13 +545,21 @@ class GenerateDocument:
             if text_img:
                 img.paste(text_img, (x, y), text_img)
                 bounding_box = [x, y, x + bbox[2], y + bbox[3]]
-                ner_annotations[label].append({"text": content, "bounding_box": bounding_box})
+                if label in ner_annotations.keys():
+                    ner_annotations[label].append({"text": content, "bounding_box": bounding_box})
                 y += bbox[3] + offset
 
         # Randomly decide to add names and dates
         add_handwritten_text("person_names", fake.name(), 40)
+
+        text1 = "\n".join(fake.sentences(nb=random.randint(4, 6)))
+        add_handwritten_text("text1", text1)
         
         add_handwritten_text("dates", fake.date_this_year().strftime("%m/%d/%y"), 30)
+
+        if random.choice([True, False]):
+            text2 = "\n".join(fake.sentences(nb=random.randint(4, 6)))
+            add_handwritten_text("text2", text2)
 
         # Add noise and rotation for realism
         image_cv = np.array(img)
@@ -718,13 +726,13 @@ class GenerateDocument:
         
         # Content mapping for drawing text and generating bounding boxes
         content = {
-            "Receiver Address": receiver_address,
-            "Date": date,
-            "Receiver Name": receiver_name,
+            "receiver_address": receiver_address,
+            "date": date,
+            "receiver_name": receiver_name,
             "body": "\n".join(fake.sentences(nb=random.randint(5, 8))),
-            "Sender Name": sender_name,
-            "Sender Address": sender_address,
-            "Sender Contact": sender_contact,
+            "sender_name": sender_name,
+            "sender_address": sender_address,
+            "sender_contact": sender_contact,
         }
         
         x, y = 50, 100
@@ -736,9 +744,9 @@ class GenerateDocument:
 
                 if label == "body":
                     y+=20
-                if label == "Receiver Name":
+                if label == "receiver_name":
                     text = f"Dear {text}, "
-                if label == "Sender Name":
+                if label == "sender_name":
                     ending_word = random.choice(["Well-wisher", "Benefactor", "Patron", "Supporter"])
                     text = f"Your {ending_word}: {text}"
                 
@@ -753,7 +761,8 @@ class GenerateDocument:
                     continue
 
                 gt_key = label.lower().replace(" ", "_")
-                ner_annotations[gt_key] = {"text": text, "bounding_box": bbox}
+                if gt_key != "body":
+                    ner_annotations[gt_key] = {"text": text, "bounding_box": bbox}
         
         # Convert to OpenCV for noise & rotation
         image_cv = np.array(img)
@@ -1147,7 +1156,7 @@ class GenerateDocument:
                 text = metadata["summary"]
                 draw.text((x, y), text, font=font, fill="black")
                 bbox = draw.textbbox((x, y), text, font=font)
-                ner_annotations["summary"] = {"text": text, "bounding_box": bbox}
+                # ner_annotations["summary"] = {"text": text, "bounding_box": bbox}
                 y = bbox[3] + 20
                 continue
 
@@ -1244,6 +1253,7 @@ class GenerateDocument:
             "authors": [],
             "publication_date": {},
             "abstract": {"text": "", "bounding_box": []},
+            "journal_conference_name": {"text": "", "bounding_box": []},
         }
         
         def add_text(label, content, font_size=30, offset=15, entry=None):
@@ -1329,8 +1339,10 @@ class GenerateDocument:
         
         report_data = {
             "title": fake.sentence(nb_words=6),
-            "author": fake.name(),
-            "affiliation": fake.company(),
+            "author": [
+                    {"name": fake.name(), "affiliation": fake.company()}
+                    for _ in range(random.randint(2, 4))
+                ],
             "date": fake.date_this_year().strftime("%m/%d/%y"),
             "keywords": random.sample(SCIENTIFIC_TERMS, random.randint(2, 4)),
             "report_id": fake.uuid4(),
@@ -1345,26 +1357,40 @@ class GenerateDocument:
         text_bbox = draw.textbbox((x, y), report_data["title"], font=title_font)
         ner_annotations["title"] = {"text": report_data["title"], "bounding_box": list(text_bbox)}
         y += text_bbox[3] - text_bbox[1] + 40
-        
+
+        auth_dict = {}
+        auth_list = []
         def add_text(label, content, font_size=30, offset=15, is_list=False):
             nonlocal y
+            nonlocal auth_dict
+            nonlocal auth_list
             font = ImageFont.truetype(random.choice(FONTS), font_size)
             draw.text((x, y), content, font=font, fill="black")
             text_bbox = draw.textbbox((x, y), content, font=font)
-            if is_list:
-                if label not in ner_annotations:
-                    ner_annotations[label] = []
-                ner_annotations[label].append({"text": content, "bounding_box": list(text_bbox)})
-            else:
-                ner_annotations[label] = {"text": content, "bounding_box": list(text_bbox)}
+
+            if label != "authors":
+                if is_list:
+                    if label in ["name", "affiliation"]:
+                        if label not in auth_dict:
+                            auth_dict[label] = {"text": content, "bounding_box": list(text_bbox)}
+                        if label=="affiliation":
+                            auth_list.append(auth_dict)
+                            auth_dict = {}
+                    else:
+                        if label not in ner_annotations:
+                            ner_annotations[label] = []
+                        ner_annotations[label].append({"text": content, "bounding_box": list(text_bbox)})
+                else:
+                    ner_annotations[label] = {"text": content, "bounding_box": list(text_bbox)}
             y += text_bbox[3] - text_bbox[1] + offset
         
-        ner_annotations["authors"] = [{
-            "name": {"text": report_data["author"], "bounding_box": []},
-            "affiliation": {"text": report_data["affiliation"], "bounding_box": []}
-        }]
-        add_text("authors", f"Author: {report_data['author']}", font_size=28, offset=20)
-        add_text("affiliation", f"Affiliation: {report_data['affiliation']}", font_size=28, offset=20)
+        add_text("authors", f"Authors: ", font_size=28, offset=20)
+        for auth_info in report_data['author']:
+            add_text("name", f"name: {auth_info['name']}", font_size=28, offset=20, is_list=True)
+            add_text("affiliation", f"Affiliation: {auth_info['affiliation']}", font_size=28, offset=20, is_list=True)
+        ner_annotations["authors"] = auth_list
+        
+
         add_text("date", f"Date: {report_data['date']}", font_size=28, offset=20)
         for keyword in report_data["keywords"]:
             add_text("keywords", keyword, font_size=28, offset=20, is_list=True)
@@ -1676,37 +1702,48 @@ class GenerateDocument:
 
     def other(self, FONTS):
         IMAGE_SIZES = [(1000, 1400), (1200, 1600), (1400, 1800), (1600, 2000), (1800, 2200), (2000, 2400)]
-        DEFAULT_FONT = random.choice(FONTS)  # Not used, but follows your function signature
+        DEFAULT_FONT = random.choice(FONTS)
 
         # Randomly select an image size
         img_size = random.choice(IMAGE_SIZES)
-        image = np.random.randint(0, 256, (img_size[1], img_size[0], 3), dtype=np.uint8)  # Noise background
 
-        # Draw random lines, circles, and shapes
-        for _ in range(random.randint(50, 100)):  # Random number of shapes
-            x1, y1 = random.randint(0, img_size[0]), random.randint(0, img_size[1])
-            x2, y2 = random.randint(0, img_size[0]), random.randint(0, img_size[1])
-            color = tuple(np.random.randint(0, 256, 3).tolist())
-            thickness = random.randint(1, 5)
+        # Create a white background image
+        img = Image.new('RGB', img_size, 'white')
+        draw = ImageDraw.Draw(img)
 
-            shape_type = random.choice(["line", "circle", "rectangle"])
-            if shape_type == "line":
-                cv2.line(image, (x1, y1), (x2, y2), color, thickness)
-            elif shape_type == "circle":
-                radius = random.randint(10, 100)
-                cv2.circle(image, (x1, y1), radius, color, thickness)
-            elif shape_type == "rectangle":
-                cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
+        # Select a font
+        font_size = 28
+        font = ImageFont.truetype(DEFAULT_FONT, font_size)
 
-        # Rotate the image randomly between -45 to 45 degrees
-        angle = random.uniform(-45, 45)
+        # Generate 10–20 random sentences
+        num_sentences = random.randint(10, 20)
+        sentences = [fake.sentence(nb_words=random.randint(6, 12)) for _ in range(num_sentences)]
+
+        # Draw each sentence on a new line
+        x, y = 100, 150
+        for sentence in sentences:
+            draw.text((x, y), sentence, font=font, fill="black")
+            text_bbox = draw.textbbox((x, y), sentence, font=font)
+            line_height = text_bbox[3] - text_bbox[1] + 20
+            y += line_height
+            if y > img_size[1] - 100:
+                break  # Avoid overflow beyond the bottom
+
+        # Convert PIL to OpenCV format
+        image_cv = np.array(img)
+        noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
+        noisy_image = cv2.add(image_cv, noise)
+
+        # Rotate the image randomly between -5 to 5 degrees
+        angle = random.uniform(-5, 5)
         center = (img_size[0] // 2, img_size[1] // 2)
         M = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_image = cv2.warpAffine(image, M, (img_size[0], img_size[1]))
+        rotated_image = cv2.warpAffine(noisy_image, M, (img_size[0], img_size[1]))
 
         # Return empty NER JSON
         GT_json = {"document_class": "other", "NER": {}}
         return GT_json, rotated_image
+
 
 
     def transform_bounding_boxes(self, ner_annotations, angle, image):
