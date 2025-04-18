@@ -122,6 +122,11 @@ def accuracy_score_calculation(detected_checkboxes, ground_truths):
     """
     try:
         scores = []
+        
+        #both lists are empty
+        if not detected_checkboxes and not ground_truths:
+            return 1.0
+        
         if abs(len(detected_checkboxes) - len(ground_truths))>1:
             return 0.0
 

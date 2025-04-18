@@ -265,7 +265,7 @@ class BaseValidatorNeuron(BaseNeuron):
 
             if len(sorted_indices) > 1:
                 second_score = scores_flat[sorted_indices[1]]
-                top_reward_threshold = 0.08 if (max_threshold - second_score) >= 0.08 else max_threshold - second_score
+                top_reward_threshold = top_reward_threshold if (max_threshold - second_score) >= top_reward_threshold else max_threshold - second_score
             else:
                 second_score = 0.0
                 top_reward_threshold = max_threshold
