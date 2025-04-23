@@ -35,6 +35,10 @@ from template.base.utils.weight_utils import (
 )  # TODO: Replace when bittensor switches to numpy
 from template.mock import MockDendrite
 from template.utils.config import add_validator_args
+import wandb
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 
 class BaseValidatorNeuron(BaseNeuron):
@@ -83,6 +87,47 @@ class BaseValidatorNeuron(BaseNeuron):
         self.is_running: bool = False
         self.thread: Union[threading.Thread, None] = None
         self.lock = asyncio.Lock()
+
+        self.wandb_run = self.initialize_wandb()
+
+    def initialize_wandb(self):
+        try:
+            api_key = os.getenv("WANDB_API_KEY", "")
+            
+            # Skip wandb initialization if no API key
+            if not api_key:
+                bt.logging.warning("No W&B API key found. Skipping W&B initialization.")
+                return None
+                
+            os.environ["WANDB_API_KEY"] = api_key
+            # Disable interaction with terminal
+            os.environ["WANDB_SILENT"] = "true"
+            
+            # Generate unique ID
+            run_id = "Tatsu-Validator1"
+            
+            wandb_run = wandb.init(
+                project="docs-insight (subnet 84)",
+                group="Tatsu-Validator",
+                name=run_id,
+                id=run_id,
+                resume="allow",
+                # Add these settings for smooth running
+                settings=wandb.Settings(
+                    _disable_stats=True,
+                    _disable_meta=True,
+                    console="off"
+                ),
+                # Make the run public by default
+                job_type="production",
+                anonymous="allow"  # Allows public access without login
+            )
+            
+            return wandb_run
+            
+        except Exception as e:
+            bt.logging.error(f"Error initializing W&B: {e}")
+            return None
 
     def serve_axon(self):
         """Serve axon to enable external connections."""
@@ -387,7 +432,7 @@ class BaseValidatorNeuron(BaseNeuron):
         # Update the hotkeys.
         self.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
 
-    def update_scores(self, rewards: np.ndarray, uids: List[int]):
+    def update_scores(self, rewards: np.ndarray, uids: List[int], task_type: str):
         """Performs exponential moving average on the scores based on the rewards received from the miners."""
 
         # Check if rewards contains NaN values.
@@ -431,6 +476,49 @@ class BaseValidatorNeuron(BaseNeuron):
         alpha: float = self.config.neuron.moving_average_alpha
         self.scores: np.ndarray = alpha * scattered_rewards + (1 - alpha) * self.scores
         bt.logging.debug(f"Updated moving avg scores: {self.scores}")
+        self.push_logs_to_wandb(scattered_rewards, self.scores, task_type)
+
+
+    def push_logs_to_wandb(self, scattered_rewards, moving_averages, task_type):
+        try:
+            # Check if wandb is initialized and running
+            if not wandb.run:
+                bt.logging.warning("W&B is not initialized. Skipping W&B logging.")
+                return
+
+            # Convert to list and round to 3 decimal places
+            scattered_rewards = [round(float(r), 3) for r in scattered_rewards.tolist()]
+            moving_averages = [round(float(s), 3) for s in moving_averages.tolist()]
+
+            if scattered_rewards and moving_averages:
+
+                # Ensure we have proper formatting for the table data
+                scattered_data = [[float(i), float(r)] for i, r in enumerate(scattered_rewards)]
+                moving_avg_data = [[float(i), float(s)] for i, s in enumerate(moving_averages)]
+
+                scattered_table = wandb.Table(
+                    columns=["UID", "Reward"],
+                    data=scattered_data
+                )
+                
+                moving_avg_table = wandb.Table(
+                    columns=["UID", "Score"],
+                    data=moving_avg_data
+                )
+                
+                # Log the tables
+                wandb.log({
+                    f"{task_type}_Scattered_Rewards": scattered_table,
+                    f"Moving_Avg_Scores": moving_avg_table
+                })
+                
+                bt.logging.info(f"📌 Logs pushed to WandB successfully")
+            else:
+                bt.logging.info(f"📌 Not pushing logs to WandB, One of the lists is empty")
+
+        except Exception as e:
+            bt.logging.error(f"Error pushing logs to W&B for task {task_type}: {e}")
+
 
     def save_state(self):
         """Saves the state of the validator to a file."""
