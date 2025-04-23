@@ -102,5 +102,5 @@ async def forward(self):
         miner_rewards = get_rewards(self, [ground_truth.get("document_class", "")], responses, Tt, task.task_sub_type)
     elif task.task_sub_type=="doc-parse":
         miner_rewards = get_rewards(self, [ground_truth], responses, Tt, task.task_sub_type)
-    self.update_scores(miner_rewards, miner_uids)
+    self.update_scores(miner_rewards, miner_uids, task.task_sub_type)
     time.sleep(5)

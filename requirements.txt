@@ -133,3 +133,4 @@ websocket-client==1.8.0
 websockets==14.1
 xxhash==3.5.0
 yarl==1.18.0
+wandb==0.19.9
