@@ -104,7 +104,7 @@ class BaseValidatorNeuron(BaseNeuron):
             os.environ["WANDB_SILENT"] = "true"
             
             # Generate unique ID
-            run_id = "Tatsu-Validator1"
+            run_id = "Tatsu-Validator3"
             
             wandb_run = wandb.init(
                 project="docs-insight (subnet 84)",
