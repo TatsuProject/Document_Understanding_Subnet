@@ -44,17 +44,17 @@ available_tasks = ["checkbox", "doc-class", "doc-parse"]
 task_generator = cycle(available_tasks)
 
 
-HEARTBEAT_FILE = f"/heartbeat.txt"  # replace with your actual path
+# HEARTBEAT_FILE = f"/heartbeat.txt"  # replace with your actual path
 
-def update_heartbeat():
-    # Ensure the directory exists
-    os.makedirs(os.path.dirname(HEARTBEAT_FILE), exist_ok=True)
+# def update_heartbeat():
+#     # Ensure the directory exists
+#     os.makedirs(os.path.dirname(HEARTBEAT_FILE), exist_ok=True)
 
-    # Write the current timestamp to the file
-    with open(HEARTBEAT_FILE, "w") as f:
-        f.write(str(time.time()))
+#     # Write the current timestamp to the file
+#     with open(HEARTBEAT_FILE, "w") as f:
+#         f.write(str(time.time()))
 
-    bt.logging.info(f"❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️ heart has beaten ❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️ ")
+#     bt.logging.info(f"❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️ heart has beaten ❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️ ")
 
 
 def get_random_image():
@@ -74,7 +74,7 @@ def get_random_image():
     binary_image = buffer.getvalue()  # Get the binary content of the image
     image_base64 = base64.b64encode(binary_image).decode('utf-8')
 
-    update_heartbeat()
+    # update_heartbeat()
     return json_label, ProfileSynapse(
         task_id=_id,
         task_type="got from api",
