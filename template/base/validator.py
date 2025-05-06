@@ -38,6 +38,8 @@ from template.utils.config import add_validator_args
 import wandb
 import os
 from dotenv import load_dotenv
+import time
+import json
 load_dotenv()
 
 
@@ -69,6 +71,18 @@ class BaseValidatorNeuron(BaseNeuron):
         # Set up initial scoring weights for validation
         bt.logging.info("Building validation weights.")
         self.scores = np.zeros(self.metagraph.n, dtype=np.float32)
+        
+        # =============================== in case validator crashes, to save miners' scores ====================
+        # self.score_path = "/bittensor-subnet-template/tmp"                          # define the path to save the scores
+        # loaded = self.load_scores_from_disk(self.score_path)
+        # # If scores weren't loaded, initialize with zeros
+        # if not loaded:
+        #     bt.logging.info("Initializing scores with zeros")
+        # ------------------------------------------------------------------------------------------------------
+        
+        # Initialize top_miner_history if it doesn't exist
+        if not hasattr(self, "top_miner_history"):
+            self.top_miner_history = []
 
         # Init sync with the network. Updates the metagraph.
         self.sync()
@@ -262,11 +276,14 @@ class BaseValidatorNeuron(BaseNeuron):
     def set_weights(self):
         """
         Updated weight-setting function:
-        - Proportional rewards if 2+ miners have score >= 0.99
-        - Otherwise, winner-take-all logic with gap threshold and burn mechanism
+        - Allocate 0.5 weight to UID 0 (subnet)
+        - Distribute remaining 0.5 weight based on existing logic:
+          - Proportional rewards if 2+ miners have score >= 0.8
+          - Otherwise, winner-take-all logic with gap threshold and burn mechanism
         """
-        top_reward_threshold = 0.10
+        top_reward_threshold = 0.05
         max_consecutive_rewards = 18
+        subnet_weight = 0.5  # Fixed weight for subnet (UID 0)
 
         if np.isnan(self.scores).any():
             bt.logging.warning("Scores contain NaN values.")
@@ -279,8 +296,8 @@ class BaseValidatorNeuron(BaseNeuron):
         scores_flat = raw_weights.flatten()
         uids = self.metagraph.uids.tolist()
 
-        # Find UIDs with score >= 0.95
-        max_threshold = 0.95
+        # Find UIDs with score >= 0.8
+        max_threshold = 0.8
         high_score_indices = np.where(scores_flat >= max_threshold)[0]
         high_score_uids = [uids[i] for i in high_score_indices]
         high_scores = scores_flat[high_score_indices]
@@ -289,16 +306,27 @@ class BaseValidatorNeuron(BaseNeuron):
             self.top_miner_history = []
 
         final_weights = np.zeros(len(uids))
+        
+        # Always allocate 0.5 to subnet (UID 0) if present
+        if 0 in uids:
+            final_weights[uids.index(0)] = subnet_weight
+            bt.logging.info(f"Allocating {subnet_weight} weight to UID 0 (subnet)")
+        else:
+            bt.logging.warning("UID 0 (subnet) not in metagraph. Cannot allocate subnet weight.")
+            subnet_weight = 0.0  # If UID 0 not present, redistribute all weight
+
+        remaining_weight = 1.0 - subnet_weight  # Remaining weight to distribute (0.5 or 1.0)
 
         if len(high_score_indices) >= 2:
             # Proportional reward among high performers
             total = np.sum(high_scores)
             for idx, uid in zip(high_score_indices, high_score_uids):
-                weight = scores_flat[idx] / total
-                final_weights[uids.index(uid)] = weight
+                if uid != 0:  # Skip UID 0 as it already has weight allocated
+                    weight = (scores_flat[idx] / total) * remaining_weight
+                    final_weights[uids.index(uid)] = weight
 
             bt.logging.info(f"Multiple high scorers (≥0.95): {list(zip(high_score_uids, high_scores))}")
-            bt.logging.info("Distributing emission proportionally among high performers.")
+            bt.logging.info(f"Distributing {remaining_weight} emission proportionally among high performers.")
 
         else:
             # === Fallback to Winner-Take-All Logic ===
@@ -330,7 +358,7 @@ class BaseValidatorNeuron(BaseNeuron):
                 if len(self.top_miner_history) >= max_consecutive_rewards:
                     if all(uid == top_uid for uid in self.top_miner_history[-max_consecutive_rewards:]):
                         bt.logging.warning(
-                            f"Miner {top_uid} has been top for {max_consecutive_rewards} consecutive tempos. Sending reward to subnet."
+                            f"Miner {top_uid} has been top for {max_consecutive_rewards} consecutive tempos. Sending remaining reward to subnet."
                         )
                         self.top_miner_history = []
                         send_to_subnet = True
@@ -339,22 +367,17 @@ class BaseValidatorNeuron(BaseNeuron):
                 else:
                     reward_this_round = True
             else:
-                bt.logging.info("No miner exceeded threshold gap. Emission skipped or goes to subnet.")
+                bt.logging.info("No miner exceeded threshold gap. Remaining emission goes to subnet.")
+                send_to_subnet = True
 
             if reward_this_round:
-                final_weights[uids.index(top_uid)] = 1.0
-                bt.logging.info(f"Rewarding top miner: UID {top_uid} with weight 1.0")
+                final_weights[uids.index(top_uid)] += remaining_weight
+                bt.logging.info(f"Rewarding top miner: UID {top_uid} with remaining weight {remaining_weight}")
 
             elif send_to_subnet:
                 if 0 in uids:
-                    final_weights[uids.index(0)] = 1.0
-                    bt.logging.info("Sending emission to UID 0 (subnet)")
-                else:
-                    bt.logging.warning("UID 0 (subnet) not in metagraph. Emission skipped.")
-            else:
-                if 0 in uids:
-                    final_weights[uids.index(0)] = 1.0
-                    bt.logging.info("Both conditions not met. Sending emission to UID 0 (subnet)")
+                    final_weights[uids.index(0)] += remaining_weight
+                    bt.logging.info(f"Sending remaining emission {remaining_weight} to UID 0 (subnet)")
                 else:
                     bt.logging.warning("UID 0 (subnet) not in metagraph. Emission skipped.")
 
@@ -432,6 +455,106 @@ class BaseValidatorNeuron(BaseNeuron):
         # Update the hotkeys.
         self.hotkeys = copy.deepcopy(self.metagraph.hotkeys)
 
+    # ============================================= in case validator crashes, miners' score should be stored on disk ===============================
+    # def save_scores_to_disk(self, path: str = None):
+    #     """
+    #     Save the current scores to disk.
+        
+    #     Args:
+    #         path: The directory path where scores should be saved.
+    #             If None, uses the default path from config.
+    #     """
+    #     if path is None:
+    #         # Use a default path based on the netuid if not specified
+    #         path = os.path.expanduser(f"~/.bittensor/scores/netuid{self.config.netuid}")
+        
+    #     # Create directory if it doesn't exist
+    #     os.makedirs(path, exist_ok=True)
+        
+    #     # Create a dictionary with the scores and UIDs
+    #     scores_data = {
+    #         "timestamp": time.time(),
+    #         "uids": self.metagraph.uids.tolist(),
+    #         "scores": self.scores.tolist(),
+    #         "top_miner_history": getattr(self, "top_miner_history", []),
+    #     }
+        
+    #     # Save to file
+    #     filename = os.path.join(path, "scores.json")
+    #     with open(filename, "w") as f:
+    #         json.dump(scores_data, f)
+        
+    #     bt.logging.info(f"Saved scores to {filename}")
+
+
+    # def load_scores_from_disk(self, path: str = None) -> bool:
+    #     """
+    #     Load scores from disk if they exist.
+        
+    #     Args:
+    #         path: The directory path where scores should be loaded from.
+    #             If None, uses the default path from config.
+        
+    #     Returns:
+    #         bool: True if scores were loaded successfully, False otherwise.
+    #     """
+    #     if path is None:
+    #         # Use a default path based on the netuid if not specified
+    #         path = os.path.expanduser(f"~/.bittensor/scores/netuid{self.config.netuid}")
+        
+    #     filename = os.path.join(path, "scores.json")
+        
+    #     # Check if the file exists
+    #     if not os.path.exists(filename):
+    #         bt.logging.info(f"No saved scores found at {filename}")
+    #         return False
+        
+    #     try:
+    #         # Load the file
+    #         with open(filename, "r") as f:
+    #             scores_data = json.load(f)
+            
+    #         # Get the saved UIDs and scores
+    #         saved_uids = scores_data.get("uids", [])
+    #         saved_scores = scores_data.get("scores", [])
+            
+    #         # Check if the metagraph has been updated since the scores were saved
+    #         # If UIDs have changed, we need to map the old scores to the new UIDs
+    #         if not np.array_equal(saved_uids, self.metagraph.uids.tolist()):
+    #             bt.logging.info("Metagraph UIDs have changed since scores were saved. Mapping old scores to new UIDs.")
+                
+    #             # Create a mapping from old UIDs to their scores
+    #             uid_to_score = {uid: score for uid, score in zip(saved_uids, saved_scores)}
+                
+    #             # Initialize new scores array
+    #             new_scores = np.zeros_like(self.scores)
+                
+    #             # Map the old scores to the new UIDs
+    #             for i, uid in enumerate(self.metagraph.uids.tolist()):
+    #                 if uid in uid_to_score:
+    #                     new_scores[i] = uid_to_score[uid]
+                
+    #             self.scores = new_scores
+    #         else:
+    #             # If UIDs haven't changed, just use the saved scores
+    #             self.scores = np.array(saved_scores)
+            
+    #         # Load top miner history if available
+    #         if "top_miner_history" in scores_data:
+    #             self.top_miner_history = scores_data["top_miner_history"]
+            
+    #         timestamp = scores_data.get("timestamp", 0)
+    #         time_diff = time.time() - timestamp
+    #         hours = time_diff / 3600
+            
+    #         bt.logging.info(f"Loaded scores from {filename} (saved {hours:.2f} hours ago)")
+    #         return True
+        
+    #     except Exception as e:
+    #         bt.logging.warning(f"Failed to load scores: {e}")
+    #         return False
+    # ---------------------------------------------------------------------------------------------------------------------------------------------------
+
     def update_scores(self, rewards: np.ndarray, uids: List[int], task_type: str):
         """Performs exponential moving average on the scores based on the rewards received from the miners."""
 
@@ -477,6 +600,18 @@ class BaseValidatorNeuron(BaseNeuron):
         self.scores: np.ndarray = alpha * scattered_rewards + (1 - alpha) * self.scores
         bt.logging.debug(f"Updated moving avg scores: {self.scores}")
         self.push_logs_to_wandb(scattered_rewards, self.scores, task_type)
+        # ============================= in case validator crashes, miners' states should be saved ==============================
+        # # Save scores to disk after updating
+        # if not hasattr(self, '_score_save_counter'):
+        #     self._score_save_counter = 0
+        
+        # self._score_save_counter += 1
+        # # Save scores every 10 updates
+        # if self._score_save_counter >= 5:
+        #     self.save_scores_to_disk(self.score_path)
+        #     self._score_save_counter = 0
+        # ----------------------------------------------------------------------------------------------------------------------
+
 
 
     def push_logs_to_wandb(self, scattered_rewards, moving_averages, task_type):
