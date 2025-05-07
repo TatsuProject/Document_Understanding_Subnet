@@ -28,6 +28,22 @@ class GenerateCheckboxTextPair:
         ])
         self.checkbox_color = self.text_color
         self.font = ""
+        self.used_regions = []  # Track all used regions
+        
+
+    def regions_overlap(self, region1, region2, buffer=10):
+        """Check if two regions overlap with a buffer zone."""
+        x1_min, y1_min, x1_max, y1_max = region1
+        x2_min, y2_min, x2_max, y2_max = region2
+        
+        # Add buffer around regions
+        x1_min -= buffer
+        y1_min -= buffer
+        x1_max += buffer
+        y1_max += buffer
+        
+        # Check for overlap
+        return not (x1_max < x2_min or x1_min > x2_max or y1_max < y2_min or y1_min > y2_max)
 
     def generate_scanned_document(self):
 
@@ -142,12 +158,13 @@ class GenerateCheckboxTextPair:
             "font": self.font
         }
 
-    def draw_random_checkbox(self, draw, x, y, checkbox_size, checkbox_color, shape_drawn, checkbox_coords):
+    def draw_random_checkbox(self, draw, x, y, checkbox_size, checkbox_color, shape_drawn, checkbox_coords, force_fill=None):
         """
         Draws a random tick or cross with slight imperfections to simulate natural human checks.
         """
-        # Randomly decide whether to draw a tick or a cross
-        fill_checkbox = random.choice([True, False])
+        # If force_fill is explicitly set, use that value instead of random choice
+        fill_checkbox = force_fill if force_fill is not None else random.choice([True, False])
+        
         if fill_checkbox:
             if shape_drawn == "rectangle":
                 if random.choice([True, False]):  # Draw tick
@@ -238,46 +255,53 @@ class GenerateCheckboxTextPair:
         """
         # Randomly choose whether to place text to the right or at the bottom
         choice = random.choice(["right", "bottom"])
-
-        # padding = 10  # Space between checkbox and text
-
+        
+        # Get text dimensions first before positioning
+        text_bbox = draw.textbbox((0, 0), text, font=font)
+        text_width, text_height = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
+        
+        # Calculate potential positions
         if choice == "right":
             # Place text to the right of the checkbox
             text_x, text_y = x + checkbox_size + padding, y + 5
-            text_bbox = draw.textbbox((0, 0), text, font=font)  # Get the bounding box of the text
-            text_width, text_height = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
-
-            # Ensure text fits within image bounds
-            if text_x + text_width > width:
-                text_x = width - text_width - 1
-            if text_y + text_height > height:
-                text_y = height - text_height - 1
-
-            if text_x < 0:
-                text_x = 1
-            if text_y < 0:
-                text_y = 1
-
-            draw.text((text_x, text_y), text, fill=text_color, font=font)
-
-        elif choice == "bottom":
-            # Place text below the checkbox
-            text_bbox = draw.textbbox((0, 0), text, font=font)
-            text_width, text_height = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
-            text_x, text_y = x + checkbox_size // 2 - text_width // 2, y + checkbox_size + padding
-
-            # Ensure text fits within image bounds
-            if text_x + text_width > width:
-                text_x = width - text_width - 1
-            if text_y + text_height > height:
-                text_y = height - text_height - 1
-
-            if text_x < 0:
-                text_x = 1
-            if text_y < 0:
-                text_y = 1
-
-            draw.text((text_x, text_y), text, fill=text_color, font=font)
+            
+            # Check if text will fit within image bounds
+            if text_x + text_width >= width:
+                # Switch to bottom placement if right placement won't fit
+                choice = "bottom"
+            
+        # Handle bottom placement (either initially chosen or as fallback)
+        if choice == "bottom":
+            text_x = x + checkbox_size // 2 - text_width // 2
+            text_y = y + checkbox_size + padding
+            
+            # Check if bottom placement will fit
+            if text_y + text_height >= height:
+                # If bottom won't fit either, find best compromise
+                if text_x + text_width < width:
+                    # Try right placement again with adjusted y
+                    text_x = x + checkbox_size + padding
+                    text_y = y + checkbox_size // 2 - text_height // 2
+                else:
+                    # Last resort: Truncate text to fit
+                    while text_width > width - text_x - 10 and len(text) > 3:
+                        text = text[:-1]  # Remove last character
+                        text_bbox = draw.textbbox((0, 0), text, font=font)
+                        text_width = text_bbox[2] - text_bbox[0]
+        
+        # Final boundary checks with safety margin
+        safety_margin = 10
+        if text_x < safety_margin:
+            text_x = safety_margin
+        if text_y < safety_margin:
+            text_y = safety_margin
+        if text_x + text_width > width - safety_margin:
+            text_x = width - text_width - safety_margin
+        if text_y + text_height > height - safety_margin:
+            text_y = height - text_height - safety_margin
+        
+        # Draw the text and return dimensions
+        draw.text((text_x, text_y), text, fill=text_color, font=font)
         return text_x, text_y, text_width, text_height
 
     def generate_random_words(self):
@@ -421,9 +445,13 @@ class GenerateCheckboxTextPair:
 
     def draw_checkbox_text_pairs(self):
         total_checkboxes_drawn = 0
+        filled_checkboxes = 0  # Track filled checkboxes
         max_attempts = 50  # Limit the number of retries to prevent infinite loops
         
-        while total_checkboxes_drawn == 0 and max_attempts > 0:
+        # Initialize a list to track used regions
+        used_regions = []
+        
+        while (total_checkboxes_drawn == 0 or filled_checkboxes == 0) and max_attempts > 0:
             # Fetch a random image
             image = self.generate_scanned_document()
             metadata = self.get_random_metadata()
@@ -431,6 +459,8 @@ class GenerateCheckboxTextPair:
             number_of_pairs = random.choice([2, 3, 4])
             json_data = {"checkboxes": []}
             total_checkboxes_drawn = 0  # Reset count for this attempt
+            filled_checkboxes = 0  # Reset filled checkboxes count
+            used_regions = []  # Reset used regions
 
             if image:
                 draw = ImageDraw.Draw(image)
@@ -440,7 +470,7 @@ class GenerateCheckboxTextPair:
                 window_width = int(0.25 * width)
                 window_height = floor(0.13 * height)
                 
-                for _ in range(number_of_pairs):
+                for i in range(number_of_pairs):
                     # Find an empty region in the image
                     x, y = self.find_empty_region(image, window_width, window_height)
                     if x is None and y is None:
@@ -452,6 +482,82 @@ class GenerateCheckboxTextPair:
                     text_color = metadata.get("text_color", (60, 60, 60))
 
                     text = self.generate_random_words()
+                    
+                    # Check text dimensions before drawing
+                    text_bbox = draw.textbbox((0, 0), text, font=font)
+                    text_width, text_height = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
+                    
+                    # Test both right and bottom placements
+                    right_placement = {
+                        "x": x + checkbox_size + metadata.get("padding", 10),
+                        "y": y + 5,
+                        "width": text_width,
+                        "height": text_height
+                    }
+                    
+                    bottom_placement = {
+                        "x": x + checkbox_size // 2 - text_width // 2,
+                        "y": y + checkbox_size + metadata.get("padding", 10),
+                        "width": text_width,
+                        "height": text_height
+                    }
+                    
+                    # Check for overlaps with existing regions
+                    def regions_overlap(r1, r2, buffer=10):
+                        # Add buffer around regions
+                        r1_expanded = [r1["x"]-buffer, r1["y"]-buffer, 
+                                    r1["x"]+r1["width"]+buffer, r1["y"]+r1["height"]+buffer]
+                        r2_expanded = [r2[0]-buffer, r2[1]-buffer, r2[2]+buffer, r2[3]+buffer]
+                        
+                        # Check for overlap
+                        return not (r1_expanded[2] < r2_expanded[0] or r1_expanded[0] > r2_expanded[2] or 
+                                    r1_expanded[3] < r2_expanded[1] or r1_expanded[1] > r2_expanded[3])
+                    
+                    # Choose placement based on bounds and overlaps
+                    valid_placements = []
+                    right_region = [right_placement["x"], right_placement["y"], 
+                                    right_placement["x"] + right_placement["width"], 
+                                    right_placement["y"] + right_placement["height"]]
+                    
+                    bottom_region = [bottom_placement["x"], bottom_placement["y"], 
+                                    bottom_placement["x"] + bottom_placement["width"], 
+                                    bottom_placement["y"] + bottom_placement["height"]]
+                    
+                    # Check if right placement is within bounds and doesn't overlap
+                    if (right_placement["x"] + right_placement["width"] < width - 10 and 
+                        right_placement["y"] + right_placement["height"] < height - 10):
+                        overlap = False
+                        for used_region in used_regions:
+                            if regions_overlap(right_placement, used_region):
+                                overlap = True
+                                break
+                        if not overlap:
+                            valid_placements.append(("right", right_placement))
+                    
+                    # Check if bottom placement is within bounds and doesn't overlap
+                    if (bottom_placement["x"] > 10 and bottom_placement["x"] + bottom_placement["width"] < width - 10 and 
+                        bottom_placement["y"] + bottom_placement["height"] < height - 10):
+                        overlap = False
+                        for used_region in used_regions:
+                            if regions_overlap(bottom_placement, used_region):
+                                overlap = True
+                                break
+                        if not overlap:
+                            valid_placements.append(("bottom", bottom_placement))
+                    
+                    # Skip this checkbox if no valid placements
+                    if not valid_placements:
+                        continue
+                    
+                    # Choose a placement randomly from valid options
+                    placement_choice, chosen_placement = random.choice(valid_placements)
+                    
+                    # Add the used region
+                    used_regions.append([chosen_placement["x"], chosen_placement["y"], 
+                                        chosen_placement["x"] + chosen_placement["width"], 
+                                        chosen_placement["y"] + chosen_placement["height"]])
+                    # Also add checkbox region 
+                    used_regions.append([x, y, x + checkbox_size, y + checkbox_size])
 
                     # Draw checkbox
                     checkbox_coords = [x, y, x + checkbox_size, y + checkbox_size]
@@ -463,13 +569,24 @@ class GenerateCheckboxTextPair:
                         draw.ellipse(checkbox_coords, outline=checkbox_color, width=metadata.get("checkbox_stroke", 2))
                         shape_drawn = "circle"
                     
+                    # Determine if this checkbox should be filled
+                    # Always fill the first checkbox, or with 60% probability for others
+                    should_be_filled = (i == 0) or (random.random() < 0.6)
+                    
+                    if should_be_filled:
+                        checkbox_filled = True
+                        self.draw_random_checkbox(draw, x, y, checkbox_size, checkbox_color, shape_drawn, checkbox_coords, force_fill=True)
+                        filled_checkboxes += 1
+                    else:
+                        checkbox_filled = self.draw_random_checkbox(draw, x, y, checkbox_size, checkbox_color, shape_drawn, checkbox_coords, force_fill=False)
+                        if checkbox_filled:
+                            filled_checkboxes += 1
 
-                    # Draw tick or cross within the checkbox
-                    checkbox_filled = self.draw_random_checkbox(draw, x, y, checkbox_size, checkbox_color, shape_drawn, checkbox_coords)
+                    # Draw the text at the chosen position
+                    text_x, text_y = chosen_placement["x"], chosen_placement["y"]
+                    draw.text((text_x, text_y), text, fill=text_color, font=font)
 
-                    text_x, text_y, text_width, text_height = self.put_text_randomly(draw, x, y, checkbox_size, text, font, text_color, width, height, metadata.get("padding", 10))
-
-                    # Save annotation in JSON format
+                    # Save annotation in JSON format - now we include filled and empty checkboxes
                     if checkbox_filled:
                         json_data["checkboxes"].append(
                             {
@@ -480,10 +597,33 @@ class GenerateCheckboxTextPair:
                                     text_x + text_width, text_y + text_height,
                                     text_x, text_y + text_height
                                 ],
-                                "text": text
+                                "text": text,
+                                "checked": checkbox_filled
                             }
                         )
                     total_checkboxes_drawn += 1
+
+                # If we have checkboxes but none are filled, fill one randomly
+                if total_checkboxes_drawn > 0 and filled_checkboxes == 0:
+                    # Choose a random checkbox to fill
+                    checkbox_idx = random.randint(0, total_checkboxes_drawn - 1)
+                    checkbox_data = json_data["checkboxes"][checkbox_idx]
+                    
+                    # Get coordinates
+                    x, y = checkbox_data["checkbox_boundingBox"][0], checkbox_data["checkbox_boundingBox"][1]
+                    checkbox_size = checkbox_data["checkbox_boundingBox"][2] - x
+                    
+                    # Determine shape based on bbox
+                    is_rectangle = len(set(checkbox_data["checkbox_boundingBox"][1::2])) == 2
+                    shape_drawn = "rectangle" if is_rectangle else "circle"
+                    
+                    # Fill it
+                    checkbox_coords = [x, y, x + checkbox_size, y + checkbox_size]
+                    self.draw_random_checkbox(draw, x, y, checkbox_size, checkbox_color, shape_drawn, checkbox_coords, force_fill=True)
+                    
+                    # Update JSON
+                    checkbox_data["checked"] = True
+                    filled_checkboxes = 1
 
                 # If no checkboxes were drawn, retry
                 if total_checkboxes_drawn == 0:
@@ -495,7 +635,7 @@ class GenerateCheckboxTextPair:
                 noisy_image = self.add_noise(image)
                 updated_image, updated_json_data = self.transform_bounding_boxes(json_data, angle, noisy_image)
 
-                bt.logging.info(f"[{self.uid}] Synthetic image generated successfully")
+                bt.logging.info(f"[{self.uid}] Synthetic image generated successfully with {filled_checkboxes} filled checkboxes")
                 return updated_json_data, updated_image
 
         bt.logging.info(f"[{self.uid}] Failed to draw any checkboxes after multiple attempts.")
