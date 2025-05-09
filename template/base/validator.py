@@ -283,7 +283,7 @@ class BaseValidatorNeuron(BaseNeuron):
         """
         top_reward_threshold = 0.05
         max_consecutive_rewards = 18
-        subnet_weight = 0.5  # Fixed weight for subnet (UID 0)
+        subnet_weight = 1.0  # Fixed weight for subnet (UID 0)s
 
         if np.isnan(self.scores).any():
             bt.logging.warning("Scores contain NaN values.")
