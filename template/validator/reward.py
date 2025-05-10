@@ -21,7 +21,7 @@ from typing import List
 import bittensor as bt
 from template.protocol import ProfileSynapse
 from fuzzywuzzy import fuzz
-
+from shapely.geometry import Polygon
 
 def hard_match_strings(string1: str, string2: str, minimum_match_percentage: float) -> float:
     try:
@@ -68,43 +68,69 @@ def time_score_calculation(time_taken, Tn=2.0):
 
 def calculate_overlap(box1, box2):
     """
-    Calculate the overlap area between two bounding boxes.
+    Calculate the overlap ratio between two bounding boxes using polygon intersection.
+    Maintains strictness by:
+    1. Returning 0.0 if detected box is 2x+ larger than ground truth box
+    2. Using max(area1, area2) as denominator instead of union area
+    3. Ensuring the result is within [0.0, 1.0] range
     
     Parameters:
-    - box1 (list): Bounding box of detected text.
-    - box2 (list): Bounding box of ground truth checkbox.
+    - box1 (list): Bounding box coordinates of detected text.
+    - box2 (list): Bounding box coordinates of ground truth checkbox.
 
     Returns:
-    - float: Overlap ratio between the two boxes.
+    - float: Overlap ratio between the two boxes, always within [0.0, 1.0].
     """
     try:
-        # Extract coordinates
-        if len(box1)==8 and len(box2)==8:
-            x1_min, y1_min = min(box1[0], box1[6]), min(box1[1], box1[7])
-            x1_max, y1_max = max(box1[2], box1[4]), max(box1[3], box1[5])
-            x2_min, y2_min = min(box2[0], box2[6]), min(box2[1], box2[7])
-            x2_max, y2_max = max(box2[2], box2[4]), max(box2[3], box2[5])
-        elif len(box1)==4 and len(box2)==4:
-            x1_min, y1_min, x1_max, y1_max = box1
-            x2_min, y2_min, x2_max, y2_max = box2
+        # Convert to polygon points
+        if len(box1) == 4 and len(box2) == 4:
+            # Format: [x_min, y_min, x_max, y_max]
+            rect1_points = [(box1[0], box1[1]), (box1[2], box1[1]), 
+                           (box1[2], box1[3]), (box1[0], box1[3])]
+            rect2_points = [(box2[0], box2[1]), (box2[2], box2[1]), 
+                           (box2[2], box2[3]), (box2[0], box2[3])]
+        elif len(box1) == 8 and len(box2) == 8:
+            # Format: [x1, y1, x2, y2, x3, y3, x4, y4]
+            rect1_points = [(box1[0], box1[1]), (box1[2], box1[3]), 
+                           (box1[4], box1[5]), (box1[6], box1[7])]
+            rect2_points = [(box2[0], box2[1]), (box2[2], box2[3]), 
+                           (box2[4], box2[5]), (box2[6], box2[7])]
+        else:
+            return 0.0  # Invalid format
         
-        # Calculate overlap area
-        overlap_x1 = max(x1_min, x2_min)
-        overlap_y1 = max(y1_min, y2_min)
-        overlap_x2 = min(x1_max, x2_max)
-        overlap_y2 = min(y1_max, y2_max)
+        # Create Polygon objects
+        poly1 = Polygon(rect1_points)
+        poly2 = Polygon(rect2_points)
         
-        if overlap_x2 < overlap_x1 or overlap_y2 < overlap_y1:
-            return 0.0  # No overlap
-
-        overlap_area = (overlap_x2 - overlap_x1) * (overlap_y2 - overlap_y1)
-        box1_area = (x1_max - x1_min) * (y1_max - y1_min)
-        box2_area = (x2_max - x2_min) * (y2_max - y2_min)
-
-        if box1_area>=2*box2_area:
+        if not poly1.is_valid or not poly2.is_valid:
             return 0.0
         
-        return overlap_area / max(box1_area, box2_area)
+        # Get accurate areas using polygon calculation
+        box1_area = poly1.area
+        box2_area = poly2.area
+        
+        # Add a small epsilon to prevent division by zero
+        epsilon = 1e-10
+        
+        # Maintain strictness rule: return 0.0 if detected box is 2x+ larger than ground truth
+        if box1_area >= 2 * box2_area:
+            return 0.0
+        
+        # Calculate intersection area with polygon geometry
+        intersection_area = poly1.intersection(poly2).area
+        
+        # Use max area as denominator (stricter than union)
+        denominator = max(box1_area, box2_area)
+        
+        if denominator < epsilon:  # Avoid division by very small values
+            return 0.0
+            
+        # Calculate ratio and clamp to [0.0, 1.0] range
+        overlap_ratio = intersection_area / denominator
+        
+        # Clamp to valid range [0.0, 1.0]
+        return max(0.0, min(1.0, overlap_ratio))
+        
     except Exception as e:
         bt.logging.error(f"[calculate_overlap] Error {e}")
         return 0.0

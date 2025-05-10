@@ -321,10 +321,7 @@ class GenerateDocument:
             img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
             noise = np.random.normal(0, 25, img.shape).astype(np.uint8)
             img = cv2.add(img, noise)
-            angle = random.uniform(-3, 3)
-            h, w = img.shape
-            matrix = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1)
-            img = cv2.warpAffine(img, matrix, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+            # Removing the rotation here - we'll rotate consistently at the end
             return img
         
         img_size = random.choice(IMAGE_SIZES)
@@ -390,8 +387,9 @@ class GenerateDocument:
             tag_boxes.append({"text": tag, "bounding_box": list(text_bbox)})
             y += line_spacing
         
-        img = np.array(img)
-        img = apply_scan_effects(img)
+        # Apply noise effects (without rotation)
+        img_np = np.array(img)
+        img_np = apply_scan_effects(img_np)
         
         ner_annotations = {
             "folder_title": bounding_boxes.get("folder_title", {"text": "", "bounding_box": []}),
@@ -403,23 +401,20 @@ class GenerateDocument:
             "tags": tag_boxes
         }
 
-        # Convert OpenCV BGR image to RGB format
-        noisy_image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # Convert back to PIL for final rotation
+        if len(img_np.shape) == 2:  # If grayscale
+            pil_image = Image.fromarray(img_np)
+        else:  # If RGB/BGR
+            pil_image = Image.fromarray(cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB))
 
-        # Convert NumPy array to PIL Image
-        noisy_pil_image = Image.fromarray(noisy_image_rgb)
-
-        # Rotate image slightly
+        # Rotate image and transform bounding boxes
         angle = random.uniform(-3, 3)
-        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
-        rotated_image = np.array(rotated_image)
+        rotated_image, updated_annotations = self.transform_bounding_boxes(ner_annotations, angle, pil_image)
 
-        GT_json = {
+        return {
             "document_class": "file_folder",
-            "NER": ner_annotations
-        }
-        
-        return GT_json, rotated_image
+            "NER": updated_annotations
+        }, np.array(rotated_image)
 
     def form(self, FONTS):
         IMAGE_SIZES = [(800, 1000), (850, 1100), (900, 1200), (1000, 1300), (1100, 1400), (1200, 1500)]
@@ -525,7 +520,7 @@ class GenerateDocument:
             img = Image.new('RGBA', (bbox[2] + 10, bbox[3] + 10), (255, 255, 255, 0))
             draw = ImageDraw.Draw(img)
             draw.text((5, 5), text, font=font, fill=(0, 0, 0, 255))
-            img = img.rotate(random.uniform(-5, 5), expand=True)
+            # We're no longer rotating individual text elements
             return img, bbox
 
         IMAGE_SIZES = [(1000, 1400), (1200, 1600), (1400, 1800), (1600, 2000), (1800, 2200), (2000, 2400)]
@@ -549,19 +544,16 @@ class GenerateDocument:
                     ner_annotations[label].append({"text": content, "bounding_box": bounding_box})
                 y += bbox[3] + offset
 
-        # Randomly decide to add names and dates
+        # Add text elements
         add_handwritten_text("person_names", fake.name(), 40)
-
         text1 = "\n".join(fake.sentences(nb=random.randint(4, 6)))
         add_handwritten_text("text1", text1)
-        
         add_handwritten_text("dates", fake.date_this_year().strftime("%m/%d/%y"), 30)
-
         if random.choice([True, False]):
             text2 = "\n".join(fake.sentences(nb=random.randint(4, 6)))
             add_handwritten_text("text2", text2)
 
-        # Add noise and rotation for realism
+        # Add noise
         image_cv = np.array(img)
         noise = np.random.normal(0, 15, image_cv.shape).astype(np.uint8)
         noisy_image = cv2.add(image_cv, noise)
@@ -572,12 +564,11 @@ class GenerateDocument:
         # Convert NumPy array to PIL Image
         noisy_pil_image = Image.fromarray(noisy_image_rgb)
 
-        # Rotate image slightly
+        # Now rotate the entire image and transform bounding boxes
         angle = random.uniform(-3, 3)
-        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
-        rotated_image = np.array(rotated_image)
-
-        return {"document_class": "handwritten", "NER": ner_annotations}, rotated_image
+        rotated_image, updated_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        
+        return {"document_class": "handwritten", "NER": updated_annotations}, np.array(rotated_image)
 
 
     def invoice(self, FONTS):
@@ -1806,6 +1797,75 @@ class GenerateDocument:
         update_annotations(ner_annotations)
 
         return rotated_img, ner_annotations  # Return updated image and annotations`
+
+
+    def transform_bounding_boxes_2(self, ner_annotations, angle, image):
+        """Transforms bounding boxes inside ner_annotations to 8-point format after rotation."""
+        import math
+        
+        # Get image dimensions
+        w, h = image.size
+        center = (w // 2, h // 2)
+        
+        # Calculate new dimensions after rotation
+        # Important: PIL rotates counterclockwise, OpenCV rotates clockwise
+        rangle = math.radians(-angle)  # Negate angle to match PIL's direction
+        new_w = int(abs(w * math.cos(rangle)) + abs(h * math.sin(rangle)))
+        new_h = int(abs(h * math.cos(rangle)) + abs(w * math.sin(rangle)))
+        
+        # Compute rotation matrix (use negative angle to match PIL's rotation direction)
+        M = cv2.getRotationMatrix2D(center, -angle, 1.0)
+        
+        # Adjust the rotation matrix for the expanded image size
+        M[0, 2] += (new_w - w) / 2
+        M[1, 2] += (new_h - h) / 2
+        
+        # Rotate the image using PIL (which handles the expand parameter properly)
+        rotated_img = image.rotate(angle, expand=True)
+
+        def rotate_bbox(bbox):
+            """Rotates a bounding box and converts it into an 8-point polygon."""
+            if not bbox or len(bbox) != 4:
+                return []
+                
+            x1, y1, x2, y2 = bbox  # Original bounding box
+
+            # Get all 4 corner points
+            points = np.array([
+                [x1, y1],  # Top-left
+                [x2, y1],  # Top-right
+                [x2, y2],  # Bottom-right
+                [x1, y2]   # Bottom-left
+            ])
+
+            # Apply rotation transformation
+            ones = np.ones((4, 1))
+            points = np.hstack([points, ones])  # Convert to homogeneous coordinates
+            rotated_points = M.dot(points.T).T  # Apply transformation
+
+            # Convert to list (flatten to store as 8 points)
+            return rotated_points.flatten().tolist()
+
+        def update_annotations(data):
+            """Recursively updates bounding boxes in the annotations."""
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    if isinstance(value, dict) and "bounding_box" in value:
+                        value["bounding_box"] = rotate_bbox(value["bounding_box"])
+                    elif isinstance(value, dict):
+                        update_annotations(value)
+                    elif isinstance(value, list):
+                        for item in value:
+                            if isinstance(item, dict) and "bounding_box" in item:
+                                item["bounding_box"] = rotate_bbox(item["bounding_box"])
+                            elif isinstance(item, dict):
+                                update_annotations(item)
+            return data
+
+        # Apply transformations to bounding boxes
+        ner_annotations = update_annotations(ner_annotations)
+
+        return rotated_img, ner_annotations
         
 
     def generate_document(self):
