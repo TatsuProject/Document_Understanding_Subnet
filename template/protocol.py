@@ -110,7 +110,7 @@ class ProfileSynapse(bt.Synapse):
     task_sub_type: str
     img_path: str
     miner_output: list
-    score: float
+    is_miner: bool
     class Config:
         """
         Pydantic model configuration class for ProfileSynapse. This class sets validation of attribute assignment as True.
@@ -168,8 +168,15 @@ class ProfileSynapse(bt.Synapse):
         allow_mutation=True,
     )
 
+    is_miner: bool = pydantic.Field(
+        ...,
+        title="is_miner",
+        description="whether a uid is active miner or not",
+        allow_mutation=True,
+    )
+
     required_hash_fields: List[str] = pydantic.Field(
-        ["task_id", "task_type", "task_sub_type", "img_path"],
+        ["task_id", "task_type", "task_sub_type", "img_path", "is_miner"],
         title="Required Hash Fields",
         description="A list of fields that are required for the hash.",
         allow_mutation=False,

@@ -77,12 +77,12 @@ class Miner(BaseMinerNeuron):
             print(f"Response: {predictions}")
             if isinstance(predictions, str):
                 predictions = [predictions]
-            return predictions
+            return predictions, response.status_code
         except Exception as e:
             print(f"Request failed: {e}")
             import traceback
             logging.error(traceback.format_exc())
-            return []
+            return [], 404
 
     def get_ocr_response(self, img_path):
         ocr_data = ocr_image_with_custom_line_detection(img_path)
@@ -90,13 +90,13 @@ class Miner(BaseMinerNeuron):
 
     def postprocess(self, binary_image, request_id, task_sub_type):
         ocr_data = self.get_ocr_response(binary_image)
-        model_resp = self.get_model_response(binary_image, request_id, task_sub_type)
+        model_resp, status_code = self.get_model_response(binary_image, request_id, task_sub_type)
         if task_sub_type=="checkbox":
             postprocessor_object = YoloCheckboxDetector()
             checkboxes = postprocessor_object.get_selected_checkboxes_with_text(model_resp, ocr_data, request_id)
-            return checkboxes
+            return checkboxes, status_code
         elif task_sub_type in ["doc-class", "doc-parse"]:
-            return model_resp
+            return model_resp, status_code
 
     async def forward(
         self, synapse: template.protocol.ProfileSynapse
@@ -117,7 +117,9 @@ class Miner(BaseMinerNeuron):
         # TODO(developer): Replace with actual implementation logic.
         bt.logging.info(f"############## synapse recieved ############")
         time.sleep(10)
-        model_result = self.postprocess(synapse.img_path, synapse.task_id, synapse.task_sub_type)
+        model_result, status_code = self.postprocess(synapse.img_path, synapse.task_id, synapse.task_sub_type)
+        if status_code == 200:
+            synapse.is_miner = True
         synapse.miner_output = model_result
         print("****************")
         print(synapse.miner_output)

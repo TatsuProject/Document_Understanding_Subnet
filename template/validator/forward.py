@@ -21,6 +21,8 @@ import time
 import bittensor as bt
 
 from template.validator.uids import get_random_uids
+from template.validator.uids import ActiveMinersManager
+
 from template.protocol import ProfileSynapse
 import uuid
 
@@ -81,7 +83,7 @@ def get_random_image():
         task_sub_type = finalized_task,
         img_path=image_base64,  # Image in binary format
         miner_output=[],  # This would be updated later
-        score=0  # The score will be calculated by the miner
+        is_miner=False,
     )
 
 async def forward(self):
@@ -92,14 +94,21 @@ async def forward(self):
 
     Args:
         self (:obj:`bittensor.neuron.Neuron`): The neuron object which contains all the necessary state for the validator.
-
     """
-    # TODO(developer): Define how the validator selects a miner to query, how often, etc.
-    # get_random_uids is an example method, but you can replace it with your own.
+    # Initialize active_miners_manager as a class attribute if it doesn't exist
+    if not hasattr(self, 'active_miners_manager'):
+        self.active_miners_manager = ActiveMinersManager(self, refresh_interval_seconds=1200)  # 20 minutes
+    
     ground_truth, task = get_random_image()
-    miner_uids = get_random_uids(self, k=self.config.neuron.sample_size)
-    bt.logging.info(f"************ available uids: {miner_uids}")
+    
+    # Get UIDs to query based on our active miners strategy
+    # - All subnet UIDs during refresh
+    # - Only active miners between refreshes
+    miner_uids = self.active_miners_manager.get_uids_to_query()
+    
+    bt.logging.info(f"************ querying uids: {miner_uids}")
     start_time = time.time()
+    
     responses = await self.dendrite(
         # Send the query to selected miner axons in the network.
         axons=[self.metagraph.axons[uid] for uid in miner_uids],
@@ -111,11 +120,18 @@ async def forward(self):
     )
     end_time = time.time()
     Tt = end_time - start_time
-    if task.task_sub_type=="checkbox":
+    
+    # If we were refreshing, update our active miners list
+    if self.active_miners_manager.pending_refresh:
+        self.active_miners_manager.update_active_miners(miner_uids, responses)
+    
+    # Process responses and assign rewards
+    if task.task_sub_type == "checkbox":
         miner_rewards = get_rewards(self, ground_truth.get("checkboxes", []), responses, Tt, task.task_sub_type)
-    elif task.task_sub_type=="doc-class":
+    elif task.task_sub_type == "doc-class":
         miner_rewards = get_rewards(self, [ground_truth.get("document_class", "")], responses, Tt, task.task_sub_type)
-    elif task.task_sub_type=="doc-parse":
+    elif task.task_sub_type == "doc-parse":
         miner_rewards = get_rewards(self, [ground_truth], responses, Tt, task.task_sub_type)
+    
     self.update_scores(miner_rewards, miner_uids, task.task_sub_type)
     time.sleep(5)
