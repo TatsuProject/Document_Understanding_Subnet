@@ -108,7 +108,7 @@ class ActiveMinersManager:
         for i, (uid, response) in enumerate(zip(uids, responses)):
             try:
                 # Consider a miner active if the response is not empty/None
-                if response.is_miner:  # This should be adjusted based on how "empty" responses look
+                if response.is_miner or response.miner_output:  # This should be adjusted based on how "empty" responses look
                     self.active_miners.add(uid)
             except:
                 continue
