@@ -92,6 +92,8 @@ class ActiveMinersManager:
         """
         current_time = time.time()
         time_since_refresh = current_time - self.last_refresh_time
+        if time_since_refresh>=self.refresh_interval_seconds:
+            self.pending_refresh = True
         return self.pending_refresh or time_since_refresh >= self.refresh_interval_seconds
     
     def update_active_miners(self, uids: List[int], responses: List):
