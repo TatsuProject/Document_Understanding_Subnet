@@ -1,6 +1,7 @@
 import random
 import json
 from PIL import Image, ImageDraw, ImageFont
+import math
 from math import floor
 import io
 import numpy as np
@@ -2187,9 +2188,9 @@ class GenerateDocument:
     def insurance_card(self, FONTS):
         """Generate realistic insurance card documents (both scanned and digital versions)"""
 
-        # Different card sizes and orientations with more variety
-        DIGITAL_SIZES = [(800, 500), (850, 530), (900, 560), (780, 490), (820, 520), (880, 550)]
-        SCANNED_SIZES = [(1000, 650), (1100, 700), (1200, 750), (950, 630), (1050, 680), (1150, 720)]
+        # FIXED: Significantly increased card sizes to prevent any overflow
+        DIGITAL_SIZES = [(800, 800), (850, 850), (900, 900), (780, 780), (820, 820), (880, 880)]
+        SCANNED_SIZES = [(1000, 1000), (1100, 1100), (1200, 1200), (950, 950), (1050, 1050), (1150, 1150)]
         
         # Real insurance company names and types
         REAL_INSURANCE_COMPANIES = [
@@ -2224,6 +2225,22 @@ class GenerateDocument:
         
         img = Image.new('RGB', img_size, bg_color)
         draw = ImageDraw.Draw(img)
+        
+        # ADDED: Helper function to check if text fits within bounds
+        def can_fit_text(y_pos, font, margin_bottom=60):
+            """Check if text at y_pos will fit within image bounds with margin"""
+            text_height = draw.textbbox((0, 0), "Test", font=font)[3]
+            return y_pos + text_height + margin_bottom <= img_size[1]
+        
+        def safe_draw_text(x, y, text, font, fill, key=None, metadata_value=None):
+            """Draw text only if it fits within bounds and add to annotations if successful"""
+            if can_fit_text(y, font):
+                draw.text((x, y), text, font=font, fill=fill)
+                if key and metadata_value is not None:
+                    bbox = draw.textbbox((x, y), text, font=font)
+                    ner_annotations[key] = {"text": str(metadata_value), "bounding_box": list(bbox)}
+                return True
+            return False
         
         # Generate realistic insurance metadata
         current_date = date.today()
@@ -2363,12 +2380,11 @@ class GenerateDocument:
             accent_color = random.choice(["#666666", "#777777", "#888888"])
             text_color = random.choice(["black", "#0a0a0a", "#1a1a1a"])
         
-        # FIXED: More consistent layout parameters
+        # Layout parameters
         y_start = random.randint(20, 30)
         x_left = random.randint(25, 40)
-        # Reduced spacing variation for better consistency
-        spacing_base = 20  # Consistent base spacing
-        spacing_variation = random.randint(1, 4)  # Much smaller variation
+        spacing_base = 20
+        spacing_variation = random.randint(1, 4)
         
         y = y_start
         
@@ -2376,49 +2392,53 @@ class GenerateDocument:
         header_styles = ["standard", "centered", "logo_right", "compact"]
         header_style = random.choice(header_styles)
         
+        # FIXED: Header with bounds checking
         if header_style == "centered":
-            # Centered company name
-            company_bbox = draw.textbbox((0, 0), metadata['insurance_company'], font=company_font)
-            company_width = company_bbox[2] - company_bbox[0]
-            company_x = (img_size[0] - company_width) // 2
-            draw.text((company_x, y), metadata['insurance_company'], font=company_font, fill=primary_color)
-            bbox = draw.textbbox((company_x, y), metadata['insurance_company'], font=company_font)
-            ner_annotations["insurance_company"] = {"text": metadata['insurance_company'], "bounding_box": list(bbox)}
-            y = bbox[3] + spacing_base
+            if can_fit_text(y, company_font):
+                company_bbox = draw.textbbox((0, 0), metadata['insurance_company'], font=company_font)
+                company_width = company_bbox[2] - company_bbox[0]
+                company_x = (img_size[0] - company_width) // 2
+                draw.text((company_x, y), metadata['insurance_company'], font=company_font, fill=primary_color)
+                bbox = draw.textbbox((company_x, y), metadata['insurance_company'], font=company_font)
+                ner_annotations["insurance_company"] = {"text": metadata['insurance_company'], "bounding_box": list(bbox)}
+                y = bbox[3] + spacing_base
+            else:
+                return None, None  # Exit early if header doesn't fit
         elif header_style == "logo_right":
-            # Company name left, logo placeholder right
-            draw.text((x_left, y), metadata['insurance_company'], font=company_font, fill=primary_color)
-            bbox = draw.textbbox((x_left, y), metadata['insurance_company'], font=company_font)
-            ner_annotations["insurance_company"] = {"text": metadata['insurance_company'], "bounding_box": list(bbox)}
-            
-            # Logo placeholder
-            logo_size = random.randint(50, 70)
-            logo_x = img_size[0] - logo_size - 30
-            logo_y = y - 5
-            draw.rectangle([logo_x, logo_y, logo_x + logo_size, logo_y + logo_size], 
-                        outline=primary_color, fill="#f8f9fa", width=2)
-            draw.text((logo_x + 20, logo_y + 25), "LOGO", font=tiny_font, fill=primary_color)
-            y = max(bbox[3], logo_y + logo_size) + spacing_base
+            if can_fit_text(y, company_font):
+                draw.text((x_left, y), metadata['insurance_company'], font=company_font, fill=primary_color)
+                bbox = draw.textbbox((x_left, y), metadata['insurance_company'], font=company_font)
+                ner_annotations["insurance_company"] = {"text": metadata['insurance_company'], "bounding_box": list(bbox)}
+                
+                # Logo placeholder
+                logo_size = random.randint(50, 70)
+                logo_x = img_size[0] - logo_size - 30
+                logo_y = y - 5
+                draw.rectangle([logo_x, logo_y, logo_x + logo_size, logo_y + logo_size], 
+                            outline=primary_color, fill="#f8f9fa", width=2)
+                draw.text((logo_x + 20, logo_y + 25), "LOGO", font=tiny_font, fill=primary_color)
+                y = max(bbox[3], logo_y + logo_size) + spacing_base
+            else:
+                return None, None
         else:
-            # Standard left-aligned
-            draw.text((x_left, y), metadata['insurance_company'], font=company_font, fill=primary_color)
-            bbox = draw.textbbox((x_left, y), metadata['insurance_company'], font=company_font)
-            ner_annotations["insurance_company"] = {"text": metadata['insurance_company'], "bounding_box": list(bbox)}
-            y = bbox[3] + spacing_base
+            if can_fit_text(y, company_font):
+                draw.text((x_left, y), metadata['insurance_company'], font=company_font, fill=primary_color)
+                bbox = draw.textbbox((x_left, y), metadata['insurance_company'], font=company_font)
+                ner_annotations["insurance_company"] = {"text": metadata['insurance_company'], "bounding_box": list(bbox)}
+                y = bbox[3] + spacing_base
+            else:
+                return None, None
         
-        # Insurance type subtitle with realistic descriptions
+        # Insurance type subtitle
         insurance_subtitles = [
             "Health Insurance Plan", "Medical Coverage", "Healthcare Plan", 
             "Medical Insurance", "Health Plan", "Medical Benefits Plan",
             "Comprehensive Health Coverage", "Health & Medical Insurance"
         ]
         insurance_type_text = random.choice(insurance_subtitles)
-        draw.text((x_left, y), insurance_type_text, font=regular_font, fill=secondary_color)
-        y += spacing_base + 10
-        
-        # Card layout variations
-        layout_styles = ["standard", "compact", "sectioned", "tabular"]
-        layout_style = random.choice(layout_styles)
+        if can_fit_text(y, regular_font):
+            draw.text((x_left, y), insurance_type_text, font=regular_font, fill=secondary_color)
+            y += spacing_base + 10
         
         # Member information section
         member_section_titles = [
@@ -2426,10 +2446,11 @@ class GenerateDocument:
             "Primary Member", "Policyholder Information", "Member Data"
         ]
         member_section_title = random.choice(member_section_titles)
-        draw.text((x_left, y), member_section_title, font=header_font, fill=primary_color)
-        y += spacing_base + spacing_variation
+        if can_fit_text(y, header_font):
+            draw.text((x_left, y), member_section_title, font=header_font, fill=primary_color)
+            y += spacing_base + spacing_variation
         
-        # Field label variations with realistic insurance terminology
+        # Field label variations
         field_labels = {
             "member_name": random.choice(["Member Name:", "Name:", "Subscriber:", "Primary Member:", "Insured:"]),
             "member_id": random.choice(["Member ID:", "ID Number:", "Subscriber ID:", "Member #:", "ID#:"]),
@@ -2439,7 +2460,7 @@ class GenerateDocument:
             "network": random.choice(["Network:", "Provider Network:", "Network Type:", "Coverage Area:", "Net:"])
         }
         
-        # FIXED: Member details with consistent alignment
+        # FIXED: Member details with bounds checking
         member_items = [
             (field_labels["member_name"], metadata['member_name'], "member_name"),
             (field_labels["member_id"], metadata['member_id'], "member_id"),
@@ -2449,197 +2470,220 @@ class GenerateDocument:
             (field_labels["network"], metadata['network'], "network")
         ]
         
-        # Calculate consistent column alignment for all layouts
+        # Calculate consistent column alignment
         max_label_width = max([draw.textbbox((0, 0), label, font=regular_font)[2] for label, _, _ in member_items])
-        value_x = x_left + max_label_width + 15  # Consistent alignment
+        value_x = x_left + max_label_width + 15
         
-        if layout_style == "tabular":
-            # Tabular layout with aligned columns
-            for label, value, key in member_items:
+        for label, value, key in member_items:
+            if can_fit_text(y, regular_font):
                 draw.text((x_left, y), label, font=regular_font, fill=text_color)
                 draw.text((value_x, y), str(value), font=regular_font, fill=text_color)
                 value_bbox = draw.textbbox((value_x, y), str(value), font=regular_font)
                 ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
                 y += spacing_base + spacing_variation
-        else:
-            # FIXED: Standard layout with consistent alignment
-            for label, value, key in member_items:
-                draw.text((x_left, y), label, font=regular_font, fill=text_color)
-                draw.text((value_x, y), str(value), font=regular_font, fill=text_color)
-                value_bbox = draw.textbbox((value_x, y), str(value), font=regular_font)
-                ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
-                y += spacing_base + spacing_variation
-        
-        # Coverage dates section
-        y += spacing_base
-        date_section_titles = [
-            "Coverage Period", "Plan Dates", "Coverage Dates", 
-            "Effective Period", "Plan Period", "Coverage Term"
-        ]
-        dates_title = random.choice(date_section_titles)
-        draw.text((x_left, y), dates_title, font=header_font, fill=primary_color)
-        y += spacing_base + spacing_variation
-        
-        # FIXED: Date labels with better spacing
-        effective_labels = ["Effective Date:", "Start Date:", "From:", "Effective:", "Coverage Begins:"]
-        expiration_labels = ["Expiration Date:", "End Date:", "To:", "Expires:", "Coverage Ends:"]
-        
-        eff_text = f"{random.choice(effective_labels)} {metadata['effective_date']}"
-        draw.text((x_left, y), eff_text, font=regular_font, fill=text_color)
-        bbox = draw.textbbox((x_left, y), eff_text, font=regular_font)
-        ner_annotations["effective_date"] = {"text": metadata['effective_date'], "bounding_box": list(bbox)}
-        
-        # FIXED: Better expiration date spacing calculation
-        eff_width = bbox[2] - bbox[0]
-        exp_x = x_left + eff_width + 30  # Consistent spacing
-        exp_text = f"{random.choice(expiration_labels)} {metadata['expiration_date']}"
-        draw.text((exp_x, y), exp_text, font=regular_font, fill=text_color)
-        bbox = draw.textbbox((exp_x, y), exp_text, font=regular_font)
-        ner_annotations["expiration_date"] = {"text": metadata['expiration_date'], "bounding_box": list(bbox)}
-        y += spacing_base + spacing_base
-        
-        # Benefits section with realistic layouts
-        benefit_section_titles = [
-            "Benefits Summary", "Coverage Benefits", "Plan Benefits", 
-            "Copayments & Deductibles", "Cost Sharing", "Benefit Details"
-        ]
-        benefits_title = random.choice(benefit_section_titles)
-        draw.text((x_left, y), benefits_title, font=header_font, fill=primary_color)
-        y += spacing_base + spacing_variation
-        
-        # FIXED: Benefits layout with better column management
-        benefits_layout = random.choice(["single_column", "two_column", "grid"])
-        
-        # Benefit labels with real insurance terminology
-        benefit_labels = {
-            "copay_primary": random.choice(["Primary Care:", "PCP Visit:", "Primary Doctor:", "Family Doctor:", "PCP:"]),
-            "copay_specialist": random.choice(["Specialist:", "Specialist Visit:", "Specialist Care:", "Spec:", "Specialist Copay:"]),
-            "deductible": random.choice(["Annual Deductible:", "Deductible:", "Individual Deductible:", "Ded:", "Annual Ded:"]),
-            "out_of_pocket_max": random.choice(["Out-of-Pocket Max:", "Max OOP:", "Annual Max:", "OOP Maximum:", "Max Out-of-Pocket:"]),
-            "rx_generic": random.choice(["Generic Rx:", "Generic Drugs:", "Generic:", "Tier 1 Rx:", "Generic Prescription:"]),
-            "rx_brand": random.choice(["Brand Rx:", "Brand Drugs:", "Preferred Brand:", "Tier 2 Rx:", "Brand Name Rx:"]),
-            "emergency_room": random.choice(["Emergency Room:", "ER Visit:", "Emergency Care:", "ER Copay:", "Emergency:"]),
-            "urgent_care": random.choice(["Urgent Care:", "Urgent Care Visit:", "Walk-in Clinic:", "Urgent Care Copay:", "UC:"])
-        }
-        
-        if benefits_layout == "two_column":
-            # FIXED: Better two-column benefit layout with proper spacing
-            benefits_col1 = [
-                (benefit_labels["copay_primary"], metadata['copay_primary'], "copay_primary"),
-                (benefit_labels["copay_specialist"], metadata['copay_specialist'], "copay_specialist"),
-                (benefit_labels["deductible"], metadata['deductible'], "deductible"),
-                (benefit_labels["rx_generic"], metadata['rx_generic'], "rx_generic")
-            ]
-            
-            benefits_col2 = [
-                (benefit_labels["out_of_pocket_max"], metadata['out_of_pocket_max'], "out_of_pocket_max"),
-                (benefit_labels["rx_brand"], metadata['rx_brand'], "rx_brand"),
-                (benefit_labels["emergency_room"], metadata['emergency_room'], "emergency_room"),
-                (benefit_labels["urgent_care"], metadata['urgent_care'], "urgent_care")
-            ]
-            
-            # Calculate safe column positions
-            col1_x = x_left
-            col2_x = x_left + int(img_size[0] * 0.5)
-            
-            # Ensure columns don't exceed image bounds
-            max_col2_label_width = max([draw.textbbox((0, 0), item[0], font=small_font)[2] for item in benefits_col2])
-            if col2_x + max_col2_label_width + 100 > img_size[0]:
-                # Fall back to single column if two columns won't fit
-                benefits_layout = "single_column"
             else:
+                break  # Stop adding member items if they don't fit
+        
+        # FIXED: Coverage dates section with bounds checking
+        if can_fit_text(y + spacing_base, header_font):
+            y += spacing_base
+            date_section_titles = [
+                "Coverage Period", "Plan Dates", "Coverage Dates", 
+                "Effective Period", "Plan Period", "Coverage Term"
+            ]
+            dates_title = random.choice(date_section_titles)
+            draw.text((x_left, y), dates_title, font=header_font, fill=primary_color)
+            y += spacing_base + spacing_variation
+            
+            # Date labels
+            effective_labels = ["Effective Date:", "Start Date:", "From:", "Effective:", "Coverage Begins:"]
+            expiration_labels = ["Expiration Date:", "End Date:", "To:", "Expires:", "Coverage Ends:"]
+            
+            if can_fit_text(y, regular_font):
+                eff_text = f"{random.choice(effective_labels)} {metadata['effective_date']}"
+                draw.text((x_left, y), eff_text, font=regular_font, fill=text_color)
+                bbox = draw.textbbox((x_left, y), eff_text, font=regular_font)
+                ner_annotations["effective_date"] = {"text": metadata['effective_date'], "bounding_box": list(bbox)}
+                
+                # Expiration date
+                eff_width = bbox[2] - bbox[0]
+                exp_x = x_left + eff_width + 30
+                exp_text = f"{random.choice(expiration_labels)} {metadata['expiration_date']}"
+                if exp_x + 200 < img_size[0]:  # Check if expiration date fits horizontally
+                    draw.text((exp_x, y), exp_text, font=regular_font, fill=text_color)
+                    bbox = draw.textbbox((exp_x, y), exp_text, font=regular_font)
+                    ner_annotations["expiration_date"] = {"text": metadata['expiration_date'], "bounding_box": list(bbox)}
+                y += spacing_base + spacing_base
+        
+        # FIXED: Benefits section with bounds checking
+        if can_fit_text(y, header_font):
+            benefit_section_titles = [
+                "Benefits Summary", "Coverage Benefits", "Plan Benefits", 
+                "Copayments & Deductibles", "Cost Sharing", "Benefit Details"
+            ]
+            benefits_title = random.choice(benefit_section_titles)
+            draw.text((x_left, y), benefits_title, font=header_font, fill=primary_color)
+            y += spacing_base + spacing_variation
+            
+            # Benefit labels
+            benefit_labels = {
+                "copay_primary": random.choice(["Primary Care:", "PCP Visit:", "Primary Doctor:", "Family Doctor:", "PCP:"]),
+                "copay_specialist": random.choice(["Specialist:", "Specialist Visit:", "Specialist Care:", "Spec:", "Specialist Copay:"]),
+                "deductible": random.choice(["Annual Deductible:", "Deductible:", "Individual Deductible:", "Ded:", "Annual Ded:"]),
+                "out_of_pocket_max": random.choice(["Out-of-Pocket Max:", "Max OOP:", "Annual Max:", "OOP Maximum:", "Max Out-of-Pocket:"]),
+                "rx_generic": random.choice(["Generic Rx:", "Generic Drugs:", "Generic:", "Tier 1 Rx:", "Generic Prescription:"]),
+                "rx_brand": random.choice(["Brand Rx:", "Brand Drugs:", "Preferred Brand:", "Tier 2 Rx:", "Brand Name Rx:"]),
+                "emergency_room": random.choice(["Emergency Room:", "ER Visit:", "Emergency Care:", "ER Copay:", "Emergency:"]),
+                "urgent_care": random.choice(["Urgent Care:", "Urgent Care Visit:", "Walk-in Clinic:", "Urgent Care Copay:", "UC:"])
+            }
+            
+            # Try two-column layout first, fall back to single column
+            benefits_layout = random.choice(["single_column", "two_column"])
+            
+            if benefits_layout == "two_column" and img_size[0] > 700:  # Only try two columns on wider images
+                benefits_col1 = [
+                    (benefit_labels["copay_primary"], metadata['copay_primary'], "copay_primary"),
+                    (benefit_labels["copay_specialist"], metadata['copay_specialist'], "copay_specialist"),
+                    (benefit_labels["deductible"], metadata['deductible'], "deductible"),
+                    (benefit_labels["rx_generic"], metadata['rx_generic'], "rx_generic")
+                ]
+                
+                benefits_col2 = [
+                    (benefit_labels["out_of_pocket_max"], metadata['out_of_pocket_max'], "out_of_pocket_max"),
+                    (benefit_labels["rx_brand"], metadata['rx_brand'], "rx_brand"),
+                    (benefit_labels["emergency_room"], metadata['emergency_room'], "emergency_room"),
+                    (benefit_labels["urgent_care"], metadata['urgent_care'], "urgent_care")
+                ]
+                
+                col1_x = x_left
+                col2_x = x_left + int(img_size[0] * 0.5)
                 col_y = y
                 
-                # Draw columns with consistent spacing
+                # Draw columns with bounds checking
                 for i, (label, value, key) in enumerate(benefits_col1):
-                    draw.text((col1_x, col_y), label, font=small_font, fill=text_color)
-                    draw.text((col1_x, col_y + 12), str(value), font=medium_font, fill=primary_color)
-                    value_bbox = draw.textbbox((col1_x, col_y + 12), str(value), font=medium_font)
-                    ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
-                    col_y += spacing_base + spacing_base
+                    if can_fit_text(col_y + 12, medium_font):  # Check for both label and value
+                        draw.text((col1_x, col_y), label, font=small_font, fill=text_color)
+                        draw.text((col1_x, col_y + 12), str(value), font=medium_font, fill=primary_color)
+                        value_bbox = draw.textbbox((col1_x, col_y + 12), str(value), font=medium_font)
+                        ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
+                        col_y += spacing_base + spacing_base
+                    else:
+                        break
                 
                 col_y = y
                 for i, (label, value, key) in enumerate(benefits_col2):
-                    if i < len(benefits_col2):
-                        draw.text((col2_x, col_y), label, font=small_font, fill=text_color)
-                        draw.text((col2_x, col_y + 12), str(value), font=medium_font, fill=primary_color)
-                        value_bbox = draw.textbbox((col2_x, col_y + 12), str(value), font=medium_font)
-                        ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
+                    if can_fit_text(col_y + 12, medium_font) and i < len(benefits_col2):
+                        if col2_x + 200 < img_size[0]:  # Check horizontal bounds
+                            draw.text((col2_x, col_y), label, font=small_font, fill=text_color)
+                            draw.text((col2_x, col_y + 12), str(value), font=medium_font, fill=primary_color)
+                            value_bbox = draw.textbbox((col2_x, col_y + 12), str(value), font=medium_font)
+                            ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
                         col_y += spacing_base + spacing_base
+                    else:
+                        break
                 
                 y = col_y
+            else:
+                # Single column benefit layout
+                all_benefits = [
+                    (benefit_labels["copay_primary"], metadata['copay_primary'], "copay_primary"),
+                    (benefit_labels["copay_specialist"], metadata['copay_specialist'], "copay_specialist"),
+                    (benefit_labels["deductible"], metadata['deductible'], "deductible"),
+                    (benefit_labels["out_of_pocket_max"], metadata['out_of_pocket_max'], "out_of_pocket_max"),
+                    (benefit_labels["rx_generic"], metadata['rx_generic'], "rx_generic"),
+                    (benefit_labels["rx_brand"], metadata['rx_brand'], "rx_brand"),
+                    (benefit_labels["emergency_room"], metadata['emergency_room'], "emergency_room"),
+                    (benefit_labels["urgent_care"], metadata['urgent_care'], "urgent_care")
+                ]
+                
+                for label, value, key in all_benefits:
+                    if can_fit_text(y, regular_font):
+                        text_content = f"{label} {value}"
+                        draw.text((x_left, y), text_content, font=regular_font, fill=text_color)
+                        bbox = draw.textbbox((x_left, y), text_content, font=regular_font)
+                        ner_annotations[key] = {"text": str(value), "bounding_box": list(bbox)}
+                        y += spacing_base + spacing_variation
+                    else:
+                        break  # Stop adding benefits if they don't fit
         
-        if benefits_layout != "two_column":  # Single column benefit layout (including fallback)
-            all_benefits = [
-                (benefit_labels["copay_primary"], metadata['copay_primary'], "copay_primary"),
-                (benefit_labels["copay_specialist"], metadata['copay_specialist'], "copay_specialist"),
-                (benefit_labels["deductible"], metadata['deductible'], "deductible"),
-                (benefit_labels["out_of_pocket_max"], metadata['out_of_pocket_max'], "out_of_pocket_max"),
-                (benefit_labels["rx_generic"], metadata['rx_generic'], "rx_generic"),
-                (benefit_labels["rx_brand"], metadata['rx_brand'], "rx_brand"),
-                (benefit_labels["emergency_room"], metadata['emergency_room'], "emergency_room"),
-                (benefit_labels["urgent_care"], metadata['urgent_care'], "urgent_care")
+        # FIXED: Contact information - draw each entity separately so all appear on image
+        contact_y = y + spacing_base
+        
+        # Try to add contact section with header
+        if can_fit_text(contact_y, header_font, margin_bottom=80):  # Need more space for 3 lines
+            contact_titles = [
+                "Contact Information", "Customer Service", "Questions? Call Us", 
+                "Need Help?", "Contact Details", "Customer Support"
             ]
+            contact_title = random.choice(contact_titles)
+            draw.text((x_left, contact_y), contact_title, font=header_font, fill=primary_color)
+            contact_y += spacing_base
             
-            for label, value, key in all_benefits:
-                draw.text((x_left, y), f"{label} {value}", font=regular_font, fill=text_color)
-                bbox = draw.textbbox((x_left, y), f"{label} {value}", font=regular_font)
-                ner_annotations[key] = {"text": str(value), "bounding_box": list(bbox)}
-                y += spacing_base + spacing_variation
+            # Draw each contact entity on separate lines
+            if can_fit_text(contact_y + (spacing_base * 2), small_font, margin_bottom=15):  # Check space for all 3 lines
+                # Customer Service
+                customer_service_text = f"Customer Service: {metadata['customer_service']}"
+                draw.text((x_left, contact_y), customer_service_text, font=small_font, fill=text_color)
+                bbox = draw.textbbox((x_left, contact_y), customer_service_text, font=small_font)
+                ner_annotations["customer_service"] = {"text": metadata['customer_service'], "bounding_box": list(bbox)}
+                contact_y += spacing_base
+                
+                # Provider Phone
+                provider_phone_text = f"Provider Services: {metadata['provider_phone']}"
+                draw.text((x_left, contact_y), provider_phone_text, font=small_font, fill=text_color)
+                bbox = draw.textbbox((x_left, contact_y), provider_phone_text, font=small_font)
+                ner_annotations["provider_phone"] = {"text": metadata['provider_phone'], "bounding_box": list(bbox)}
+                contact_y += spacing_base
+                
+                # Website
+                website_text = f"Website: {metadata['website']}"
+                draw.text((x_left, contact_y), website_text, font=small_font, fill=text_color)
+                bbox = draw.textbbox((x_left, contact_y), website_text, font=small_font)
+                ner_annotations["website"] = {"text": metadata['website'], "bounding_box": list(bbox)}
+        elif can_fit_text(contact_y + (spacing_base * 2), small_font, margin_bottom=15):
+            # Try without header if header doesn't fit but we have space for 3 contact lines
+            # Customer Service
+            customer_service_text = f"Customer Service: {metadata['customer_service']}"
+            draw.text((x_left, contact_y), customer_service_text, font=small_font, fill=text_color)
+            bbox = draw.textbbox((x_left, contact_y), customer_service_text, font=small_font)
+            ner_annotations["customer_service"] = {"text": metadata['customer_service'], "bounding_box": list(bbox)}
+            contact_y += spacing_base
+            
+            # Provider Phone
+            provider_phone_text = f"Provider Services: {metadata['provider_phone']}"
+            draw.text((x_left, contact_y), provider_phone_text, font=small_font, fill=text_color)
+            bbox = draw.textbbox((x_left, contact_y), provider_phone_text, font=small_font)
+            ner_annotations["provider_phone"] = {"text": metadata['provider_phone'], "bounding_box": list(bbox)}
+            contact_y += spacing_base
+            
+            # Website
+            website_text = f"Website: {metadata['website']}"
+            draw.text((x_left, contact_y), website_text, font=small_font, fill=text_color)
+            bbox = draw.textbbox((x_left, contact_y), website_text, font=small_font)
+            ner_annotations["website"] = {"text": metadata['website'], "bounding_box": list(bbox)}
+        # If contact info doesn't fit, simply don't include it in annotations
         
-        # FIXED: Better contact information positioning
-        contact_y = max(y + spacing_base, img_size[1] - 80)
-        contact_titles = [
-            "Contact Information", "Customer Service", "Questions? Call Us", 
-            "Need Help?", "Contact Details", "Customer Support"
-        ]
-        contact_title = random.choice(contact_titles)
-        draw.text((x_left, contact_y), contact_title, font=header_font, fill=primary_color)
-        contact_y += spacing_base
-        
-        # Contact details with realistic formatting
-        contact_formats = [
-            f"Customer Service: {metadata['customer_service']} | Provider Services: {metadata['provider_phone']}",
-            f"Call: {metadata['customer_service']} | Web: {metadata['website']}",
-            f"Phone: {metadata['customer_service']} | Online: {metadata['website']}",
-            f"{metadata['customer_service']} | {metadata['website']}"
-        ]
-        contact_info = random.choice(contact_formats)
-        draw.text((x_left, contact_y), contact_info, font=small_font, fill=text_color)
-        bbox = draw.textbbox((x_left, contact_y), contact_info, font=small_font)
-        
-        # Store contact annotations (using the full contact line bbox for simplicity)
-        ner_annotations["customer_service"] = {"text": metadata['customer_service'], "bounding_box": list(bbox)}
-        ner_annotations["provider_phone"] = {"text": metadata['provider_phone'], "bounding_box": list(bbox)}
-        ner_annotations["website"] = {"text": metadata['website'], "bounding_box": list(bbox)}
-        
-        # Add varied decorative elements for digital cards
-        if is_digital:
+        # Add decorative elements (only if we have space)
+        if is_digital and y < img_size[1] - 100:
             decoration_styles = ["minimal", "standard", "corporate", "modern"]
             decoration_style = random.choice(decoration_styles)
             
             if decoration_style == "corporate":
-                # Corporate style with multiple elements
                 draw.rectangle([10, 10, img_size[0] - 10, img_size[1] - 10], outline=primary_color, width=4)
                 draw.rectangle([15, 15, img_size[0] - 15, img_size[1] - 15], outline=accent_color, width=1)
                 draw.line([(x_left, 90), (img_size[0] - 30, 90)], fill=secondary_color, width=3)
                 draw.line([(x_left, 93), (img_size[0] - 30, 93)], fill=accent_color, width=1)
             elif decoration_style == "modern":
-                # Modern style with gradients simulation
                 for i in range(5):
-                    alpha = 255 - (i * 40)
                     draw.rectangle([15 + i, 15 + i, img_size[0] - 15 - i, img_size[1] - 15 - i], 
                                 outline=primary_color, width=1)
                 draw.line([(x_left, 85), (img_size[0] - 30, 85)], fill=accent_color, width=2)
             elif decoration_style == "standard":
-                # Standard insurance card style
                 draw.rectangle([15, 15, img_size[0] - 15, img_size[1] - 15], outline=primary_color, width=3)
                 draw.line([(x_left, 80), (img_size[0] - 30, 80)], fill=secondary_color, width=2)
-            # Minimal has no decorations
             
             # Company-specific design elements
             if "Blue" in insurance_company:
-                # Add blue-themed elements
                 for i in range(3):
                     y_pos = 40 + (i * 15)
                     draw.line([(img_size[0] - 50, y_pos), (img_size[0] - 20, y_pos)], fill=accent_color, width=2)
@@ -2869,7 +2913,6 @@ class GenerateDocument:
 
     def transform_bounding_boxes_2(self, ner_annotations, angle, image):
         """Transforms bounding boxes inside ner_annotations to 8-point format after rotation."""
-        import math
         
         # Get image dimensions
         w, h = image.size

@@ -324,7 +324,7 @@ class HighlightedDocumentGenerator:
                 y -= center_y
                 
                 # Rotate
-                angle_rad = radians(angle)
+                angle_rad = radians(-angle)
                 new_x = x * cos(angle_rad) - y * sin(angle_rad)
                 new_y = x * sin(angle_rad) + y * cos(angle_rad)
                 

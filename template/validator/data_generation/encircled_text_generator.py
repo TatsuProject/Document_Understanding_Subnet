@@ -452,7 +452,7 @@ class DocumentWithEncircledTextGenerator:
                 y = encircle["boundingBox"][i+1]
                 
                 # Calculate rotation around the center of the original image
-                angle_rad = radians(angle)
+                angle_rad = radians(-angle)
                 cx, cy = width / 2, height / 2
                 
                 # Translate to origin, rotate, translate back, and add the expansion offset
@@ -1069,7 +1069,7 @@ class DocumentWithEncircledLineGenerator:
                 y = encircle["boundingBox"][i+1]
                 
                 # Calculate rotation around the center of the original image
-                angle_rad = radians(angle)
+                angle_rad = radians(-angle)
                 cx, cy = width / 2, height / 2
                 
                 # Translate to origin, rotate, translate back, and add the expansion offset
