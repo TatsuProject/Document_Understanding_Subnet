@@ -41,8 +41,10 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 
 from template.validator.data_generation.checkbox_generator import GenerateCheckboxTextPair
 from template.validator.data_generation.document_generator import GenerateDocument
+from template.validator.data_generation.encircled_text_generator import DocumentWithEncircledTextGenerator, DocumentWithEncircledLineGenerator
+from template.validator.data_generation.highlighted_text_generator import HighlightedDocumentGenerator
 
-available_tasks = ["checkbox", "doc-class", "doc-parse"]
+available_tasks = ["checkbox", "doc-class", "doc-parse", "encircle", "highlight"]
 task_generator = cycle(available_tasks)
 
 
@@ -63,6 +65,8 @@ def get_random_image():
     _id = str(uuid.uuid4())
     checkbox_data_generator_object = GenerateCheckboxTextPair("", _id)
     document_generator_object = GenerateDocument("", _id)
+    encircled_text_generator = random.choice([DocumentWithEncircledTextGenerator(_id), DocumentWithEncircledLineGenerator(_id)])
+    highlighted_text_generator = HighlightedDocumentGenerator(_id)
 
     finalized_task = next(task_generator)
     bt.logging.info(f"########### sub task type: {finalized_task}")
@@ -71,6 +75,10 @@ def get_random_image():
         json_label, image = document_generator_object.generate_document()
     elif finalized_task == "checkbox":
         json_label, image = checkbox_data_generator_object.draw_checkbox_text_pairs()
+    elif finalized_task == "encircle":
+        json_label, image = encircled_text_generator.draw_encircled_text()
+    elif finalized_task == "highlight":
+        json_label, image = highlighted_text_generator.generate_document_with_highlights()
     buffer = BytesIO()          # Create an in-memory bytes buffer
     image.save(buffer, format="PNG")  # Save the image to the buffer in PNG format
     binary_image = buffer.getvalue()  # Get the binary content of the image
@@ -97,7 +105,7 @@ async def forward(self):
     """
     # Initialize active_miners_manager as a class attribute if it doesn't exist
     if not hasattr(self, 'active_miners_manager'):
-        self.active_miners_manager = ActiveMinersManager(self, refresh_interval_seconds=1200)  # 20 minutes
+        self.active_miners_manager = ActiveMinersManager(self, refresh_interval_seconds=600)  # 10 minutes
     
     ground_truth, task = get_random_image()
     
@@ -128,6 +136,10 @@ async def forward(self):
     # Process responses and assign rewards
     if task.task_sub_type == "checkbox":
         miner_rewards = get_rewards(self, ground_truth.get("checkboxes", []), responses, Tt, task.task_sub_type)
+    elif task.task_sub_type == "highlight":
+        miner_rewards = get_rewards(self, ground_truth.get("highlights", []), responses, Tt, task.task_sub_type)
+    elif task.task_sub_type == "encircle":
+        miner_rewards = get_rewards(self, ground_truth.get("encircles", []), responses, Tt, task.task_sub_type)
     elif task.task_sub_type == "doc-class":
         miner_rewards = get_rewards(self, [ground_truth.get("document_class", "")], responses, Tt, task.task_sub_type)
     elif task.task_sub_type == "doc-parse":

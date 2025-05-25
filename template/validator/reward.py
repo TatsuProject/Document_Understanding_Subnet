@@ -40,6 +40,42 @@ def hard_match_strings(string1: str, string2: str, minimum_match_percentage: flo
     except Exception as e:
         bt.logging.error(f"[hard_match_strings] Error {e}")
         return 0.0
+    
+    
+def hard_match_strings_2(string1: str, string2: str, minimum_match_percentage: float) -> float:
+    """ Slightly softer logic
+    """
+    try:
+        # If length difference is more than one, it's an immediate mismatch
+        if abs(len(string1) - len(string2)) > 1:
+            return 0.0
+
+        # Determine shorter and longer strings
+        shorter, longer = (string1, string2) if len(string1) <= len(string2) else (string2, string1)
+        
+        # If strings are the same length, do a direct comparison
+        if len(shorter) == len(longer):
+            matches = sum(1 for c1, c2 in zip(shorter, longer) if c1 == c2)
+        else:
+            # Look for the best alignment of the shorter string within the longer string
+            # (we'll try both possible positions since the difference is only 1)
+            max_matches = 0
+            for start_pos in range(2):  # Try positions 0 and 1
+                if start_pos + len(shorter) <= len(longer):
+                    current_matches = sum(1 for c1, c2 in zip(shorter, longer[start_pos:]) if c1 == c2)
+                    max_matches = max(max_matches, current_matches)
+            
+            matches = max_matches
+
+        # Calculate match percentage based on the longest string
+        longest_length = len(longer)
+        match_percentage = (matches / longest_length) * 100 if longest_length else 100.0
+
+        # Apply minimum match threshold
+        return match_percentage if match_percentage >= minimum_match_percentage else 0.0
+    except Exception as e:
+        bt.logging.error(f"[hard_match_strings_2] Error {e}")
+        return 0.0
 
 
 def time_score_calculation(time_taken, Tn=2.0):
@@ -201,6 +237,143 @@ def accuracy_score_calculation(detected_checkboxes, ground_truths):
     except Exception as e:
         bt.logging.error(f"[accuracy_score_calculation] Error {e}")
         return 0.0
+    
+    
+def highlight_accuracy_score_calculation(detected_highlights, ground_truths):
+    """
+    Calculate the accuracy score based on detected highlights and ground truths.
+
+    Parameters:
+    - detected_highlights (list): List of detected highlight data.
+    - ground_truths (list): List of ground truth highlight data.
+
+    Returns:
+    - float: Overall accuracy score.
+    """
+    try:
+        scores = []
+        
+        # Both lists are empty
+        if not detected_highlights and not ground_truths:
+            return 1.0
+        
+        # If difference in count is too large, return 0
+        if abs(len(detected_highlights) - len(ground_truths)) > 1:
+            return 0.0
+
+        for detected in detected_highlights:
+            detected_bbox = detected.get('boundingBox', [])
+            detected_text = detected.get('text', '')
+            
+            score_for_detected_pair = 0.0
+            for ground_truth in ground_truths:
+                ground_truth_bbox = ground_truth.get('boundingBox', [])
+                ground_truth_text = ground_truth.get('text', '')
+                
+                # Calculate HBS (Highlight Bounding Box Score)
+                overlap = calculate_overlap(detected_bbox, ground_truth_bbox)
+                if overlap > 0.95:
+                    hbs = 1.0
+                elif overlap > 0.7:
+                    hbs = 1.0 - (0.95 - overlap) / (0.95 - 0.7) * 0.5  # Decrease score gradually
+                else:
+                    hbs = 0.0
+                
+                # Calculate TS (Text Similarity)
+                ts = hard_match_strings_2(detected_text, ground_truth_text, 75.0)
+                if ts >= 100:
+                    ts_score = 1.0
+                elif ts >= 30:
+                    ts_score = (ts - 30) / 70  # Decrease score gradually
+                else:
+                    ts_score = 0.0
+                
+                # Calculate score for this pair
+                score = (hbs + ts_score) / 2
+                if score > score_for_detected_pair:
+                    score_for_detected_pair = score
+            
+            scores.append(score_for_detected_pair)
+        
+        # Calculate overall accuracy score
+        if scores:
+            accuracy_score = sum(scores) / len(scores)
+        else:
+            accuracy_score = 0.0
+        
+        return accuracy_score
+    except Exception as e:
+        bt.logging.error(f"[highlight_accuracy_score_calculation] Error {e}")
+        return 0.0
+
+
+def encircle_accuracy_score_calculation(detected_encircles, ground_truths):
+    """
+    Calculate the accuracy score based on detected encircles and ground truths.
+
+    Parameters:
+    - detected_encircles (list): List of detected encircle data.
+    - ground_truths (list): List of ground truth encircle data.
+
+    Returns:
+    - float: Overall accuracy score.
+    """
+    try:
+        scores = []
+        
+        # Both lists are empty
+        if not detected_encircles and not ground_truths:
+            return 1.0
+        
+        # If difference in count is too large, return 0
+        if abs(len(detected_encircles) - len(ground_truths)) > 1:
+            return 0.0
+
+        for detected in detected_encircles:
+            detected_bbox = detected.get('boundingBox', [])
+            detected_text = detected.get('text', '')
+            
+            score_for_detected_pair = 0.0
+            for ground_truth in ground_truths:
+                ground_truth_bbox = ground_truth.get('boundingBox', [])
+                ground_truth_text = ground_truth.get('text', '')
+                
+                # Calculate EBS (Encircle Bounding Box Score)
+                overlap = calculate_overlap(detected_bbox, ground_truth_bbox)
+                if overlap > 0.95:
+                    ebs = 1.0
+                elif overlap > 0.7:
+                    ebs = 1.0 - (0.95 - overlap) / (0.95 - 0.7) * 0.5  # Decrease score gradually
+                else:
+                    ebs = 0.0
+                
+                # Calculate TS (Text Similarity)
+                ts = hard_match_strings_2(detected_text, ground_truth_text, 75.0)
+                if ts >= 100:
+                    ts_score = 1.0
+                elif ts >= 30:
+                    ts_score = (ts - 30) / 70  # Decrease score gradually
+                else:
+                    ts_score = 0.0
+                
+                # Calculate score for this pair
+                score = (ebs + ts_score) / 2
+                if score > score_for_detected_pair:
+                    score_for_detected_pair = score
+            
+            scores.append(score_for_detected_pair)
+        
+        # Calculate overall accuracy score
+        if scores:
+            accuracy_score = sum(scores) / len(scores)
+        else:
+            accuracy_score = 0.0
+        
+        return accuracy_score
+    except Exception as e:
+        bt.logging.error(f"[encircle_accuracy_score_calculation] Error {e}")
+        return 0.0
+    
 
 def final_score_calculation(time_score, accuracy_score):
     try:
@@ -235,6 +408,61 @@ def reward(ground_truth: list, response: ProfileSynapse, Tt: float) -> float:
         return score
     except Exception as e:
         bt.logging.error(f"[reward] Error {e}")
+        return 0.0
+    
+def highlight_reward(ground_truth: list, response: ProfileSynapse, Tt: float) -> float:
+    """
+    Reward the miner response for highlighted text detection. This method returns a reward
+    value for the miner, which is used to update the miner's score.
+
+    Returns:
+    - float: The reward value for the miner.
+    """
+    try:
+        highlights_detected = response.miner_output
+
+        bt.logging.info(f"*************** Detected Highlights:")
+        bt.logging.info(highlights_detected)
+        bt.logging.info("************** End")
+        bt.logging.info(f"*************** Ground Truth:")
+        bt.logging.info(ground_truth)
+        bt.logging.info("************** End")
+        
+        tim_score = time_score_calculation(Tt)
+        acc_score = highlight_accuracy_score_calculation(highlights_detected, ground_truth)
+        # score = final_score_calculation(tim_score, acc_score)
+        score = acc_score
+        return score
+    except Exception as e:
+        bt.logging.error(f"[highlight_reward] Error {e}")
+        return 0.0
+
+
+def encircle_reward(ground_truth: list, response: ProfileSynapse, Tt: float) -> float:
+    """
+    Reward the miner response for encircled text detection. This method returns a reward
+    value for the miner, which is used to update the miner's score.
+
+    Returns:
+    - float: The reward value for the miner.
+    """
+    try:
+        encircles_detected = response.miner_output
+
+        bt.logging.info(f"*************** Detected Encircles:")
+        bt.logging.info(encircles_detected)
+        bt.logging.info("************** End")
+        bt.logging.info(f"*************** Ground Truth:")
+        bt.logging.info(ground_truth)
+        bt.logging.info("************** End")
+        
+        tim_score = time_score_calculation(Tt)
+        acc_score = encircle_accuracy_score_calculation(encircles_detected, ground_truth)
+        # score = final_score_calculation(tim_score, acc_score)
+        score = acc_score
+        return score
+    except Exception as e:
+        bt.logging.error(f"[encircle_reward] Error {e}")
         return 0.0
 
 
@@ -391,25 +619,35 @@ def get_rewards(
     - np.ndarray: An array of rewards for the given query and responses.
     """
     # Get all the reward results by iteratively calling your reward() function.
-    if sub_task_type=="checkbox":
+    if sub_task_type == "checkbox":
         return np.array(
             [reward(ground_truth, each_resp, Tt) for each_resp in responses]
         )
+    
+    elif sub_task_type == "highlight":
+        return np.array(
+            [highlight_reward(ground_truth, each_resp, Tt) for each_resp in responses]
+        )
+    
+    elif sub_task_type == "encircle":
+        return np.array(
+            [encircle_reward(ground_truth, each_resp, Tt) for each_resp in responses]
+        )
 
-    elif sub_task_type=="doc-class":
+    elif sub_task_type == "doc-class":
         return np.array(
             [doc_class_reward(ground_truth, each_resp, Tt) for each_resp in responses]
         )
 
-    elif sub_task_type=="doc-parse":
-        scores_array=np.zeros(len(responses))
+    elif sub_task_type == "doc-parse":
+        scores_array = np.zeros(len(responses))
         for idx, each_resp in enumerate(responses):
-            if len(ground_truth)>0:
+            if len(ground_truth) > 0:
                 classification_score = doc_class_reward([ground_truth[0].get("document_class", "")], each_resp, Tt)
                 parsing_score = doc_parse_reward(ground_truth, each_resp, Tt)
                 weighted_avg_score = 0.3*classification_score + 0.7*parsing_score
-                scores_array[idx]=weighted_avg_score
+                scores_array[idx] = weighted_avg_score
             else:
-                scores_array[idx]=0.0
+                scores_array[idx] = 0.0
 
         return scores_array

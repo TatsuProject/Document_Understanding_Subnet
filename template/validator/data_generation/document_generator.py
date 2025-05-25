@@ -8,6 +8,7 @@ import cv2
 from faker import Faker
 import os
 import uuid
+from datetime import date, timedelta
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 fake = Faker()
@@ -1689,7 +1690,1074 @@ class GenerateDocument:
 
         GT_json = {"document_class": "medical_document", "NER": ner_annotations}
         return GT_json, image_cv
+    
+    
+    def driving_license(self, FONTS):
+        """Generate realistic driving license documents (both scanned and digital versions)"""
+        
+        # Different license layouts and sizes with more variety
+        DIGITAL_SIZES = [(800, 500), (850, 530), (900, 560), (780, 490), (820, 520)]
+        SCANNED_SIZES = [(1000, 700), (1100, 750), (1200, 800), (950, 680), (1050, 720)]
+        
+        # Realistic US States data
+        US_STATES = [
+            ("California", "CA"), ("Texas", "TX"), ("Florida", "FL"), ("New York", "NY"),
+            ("Pennsylvania", "PA"), ("Illinois", "IL"), ("Ohio", "OH"), ("Georgia", "GA"),
+            ("North Carolina", "NC"), ("Michigan", "MI"), ("New Jersey", "NJ"), ("Virginia", "VA"),
+            ("Washington", "WA"), ("Arizona", "AZ"), ("Massachusetts", "MA"), ("Tennessee", "TN"),
+            ("Indiana", "IN"), ("Missouri", "MO"), ("Maryland", "MD"), ("Wisconsin", "WI"),
+            ("Colorado", "CO"), ("Minnesota", "MN"), ("South Carolina", "SC"), ("Alabama", "AL"),
+            ("Louisiana", "LA"), ("Kentucky", "KY"), ("Oregon", "OR"), ("Oklahoma", "OK"),
+            ("Connecticut", "CT"), ("Utah", "UT"), ("Iowa", "IA"), ("Nevada", "NV"),
+            ("Arkansas", "AR"), ("Mississippi", "MS"), ("Kansas", "KS"), ("New Mexico", "NM")
+        ]
+        
+        # Realistic license data
+        REAL_LICENSE_CLASSES = ["A", "B", "C", "CDL-A", "CDL-B", "CDL-C", "M", "D"]
+        REAL_ENDORSEMENTS = ["NONE", "M", "H", "N", "P", "S", "T", "X", "P/S", "H/N"]
+        REAL_RESTRICTIONS = ["NONE", "A", "B", "C", "D", "E", "F", "G", "A/B", "C/D"]
+        REAL_EYE_COLORS = ["BLU", "BRN", "GRN", "HZL", "GRY", "BLK", "AMB", "DIC"]
+        
+        # Randomly decide if it's digital or scanned
+        is_digital = random.choice([True, False])
+        
+        if is_digital:
+            img_size = random.choice(DIGITAL_SIZES)
+            bg_colors = ["white", "#f8f9fa", "#fefefe", "#f5f5f5", "#fbfbfb"]
+            bg_color = random.choice(bg_colors)
+        else:
+            img_size = random.choice(SCANNED_SIZES)
+            bg_color = random.choice(["white", "#fffffe", "#fefefe"])
+        
+        img = Image.new('RGB', img_size, bg_color)
+        draw = ImageDraw.Draw(img)
+        
+        # Generate realistic license metadata
+        state_name, state_abbr = random.choice(US_STATES)
+        
+        # Generate realistic dates with proper logic
+        from datetime import date
+        current_date = date.today()
+        birth_date = fake.date_between(start_date='-75y', end_date='-16y')
+        
+        # Issue date should be after 18th birthday and before current date
+        min_issue_age = birth_date.replace(year=birth_date.year + 16)
+        earliest_issue = max(min_issue_age, current_date.replace(year=current_date.year - 8))
+        issue_date = fake.date_between(start_date=earliest_issue, end_date=current_date)
+        
+        # Expiration date is typically 4-8 years from issue date
+        exp_years = random.choice([4, 5, 6, 8])
+        exp_date = issue_date.replace(year=issue_date.year + exp_years)
+        
+        # Generate realistic license number patterns by state
+        license_patterns = {
+            'CA': f"{fake.random_letter()}{fake.random_number(digits=7)}",
+            'TX': f"{fake.random_number(digits=8)}",
+            'FL': f"{fake.random_letter()}{fake.random_number(digits=3)}-{fake.random_number(digits=3)}-{fake.random_number(digits=2)}-{fake.random_number(digits=3)}-{fake.random_number(digits=1)}",
+            'NY': f"{fake.random_number(digits=3)} {fake.random_number(digits=3)} {fake.random_number(digits=3)}",
+            'default': f"{fake.random_letter()}{fake.random_number(digits=2)}{fake.random_number(digits=6)}"
+        }
+        
+        license_number = license_patterns.get(state_abbr, license_patterns['default'])
+        
+        # Generate realistic height and weight combinations
+        is_male = random.choice([True, False])
+        if is_male:
+            height_inches = random.randint(64, 78)  # 5'4" to 6'6"
+            weight = random.randint(140, 280)
+            sex = "M"
+        else:
+            height_inches = random.randint(60, 72)  # 5'0" to 6'0"
+            weight = random.randint(110, 220)
+            sex = "F"
+        
+        height_feet = height_inches // 12
+        height_remaining = height_inches % 12
+        height_str = f"{height_feet}'-{height_remaining:02d}\""
+        
+        metadata = {
+            "full_name": fake.name_male() if is_male else fake.name_female(),
+            "license_number": license_number,
+            "date_of_birth": birth_date.strftime("%m/%d/%Y"),
+            "address": fake.street_address() + ", " + fake.city() + ", " + state_abbr + " " + fake.zipcode(),
+            "state": state_name,
+            "state_abbr": state_abbr,
+            "issue_date": issue_date.strftime("%m/%d/%Y"),
+            "expiration_date": exp_date.strftime("%m/%d/%Y"),
+            "license_class": random.choice(REAL_LICENSE_CLASSES),
+            "endorsements": random.choice(REAL_ENDORSEMENTS),
+            "restrictions": random.choice(REAL_RESTRICTIONS),
+            "height": height_str,
+            "weight": f"{weight} lbs",
+            "eye_color": random.choice(REAL_EYE_COLORS),
+            "sex": sex,
+            "organ_donor": random.choice(["YES", "NO"]),
+            "veteran": random.choice(["YES", "NO"]) if random.random() > 0.85 else None
+        }
+        
+        # Initialize coordinates and annotations
+        ner_annotations = {}
+        
+        # Choose fonts with more variety
+        try:
+            available_fonts = FONTS if FONTS else []
+            if available_fonts:
+                header_font = ImageFont.truetype(random.choice(available_fonts), random.randint(22, 26))
+                regular_font = ImageFont.truetype(random.choice(available_fonts), random.randint(14, 18))
+                small_font = ImageFont.truetype(random.choice(available_fonts), random.randint(10, 14))
+                large_font = ImageFont.truetype(random.choice(available_fonts), random.randint(18, 22))
+                name_font = ImageFont.truetype(random.choice(available_fonts), random.randint(16, 20))
+            else:
+                raise Exception("No fonts available")
+        except:
+            header_font = ImageFont.load_default()
+            regular_font = ImageFont.load_default()
+            small_font = ImageFont.load_default()
+            large_font = ImageFont.load_default()
+            name_font = ImageFont.load_default()
+        
+        # More diverse color schemes
+        if is_digital:
+            color_schemes = [
+                {"header": "#1e40af", "text": "#000000", "accent": "#3b82f6"},
+                {"header": "#166534", "text": "#000000", "accent": "#22c55e"},
+                {"header": "#991b1b", "text": "#000000", "accent": "#ef4444"},
+                {"header": "#6b21a8", "text": "#000000", "accent": "#a855f7"},
+                {"header": "#ea580c", "text": "#000000", "accent": "#f97316"},
+                {"header": "#0f766e", "text": "#000000", "accent": "#14b8a6"},
+                {"header": "#7c2d12", "text": "#000000", "accent": "#f59e0b"}
+            ]
+            colors = random.choice(color_schemes)
+            header_color = colors["header"]
+            text_color = colors["text"]
+            accent_color = colors["accent"]
+        else:
+            header_color = random.choice(["black", "#1a1a1a", "#2a2a2a"])
+            text_color = random.choice(["black", "#0a0a0a", "#1a1a1a"])
+            accent_color = random.choice(["black", "#333333", "#444444"])
+        
+        # FIXED: More consistent layout parameters for better spacing
+        y_start = random.randint(20, 30)
+        x_left = random.randint(30, 45)
+        # Reduced spacing variation to prevent overlap
+        base_spacing = 22  # Consistent base spacing
+        spacing_variation = random.randint(2, 6)  # Much smaller variation
+        
+        y = y_start
+        
+        # More diverse header layouts
+        header_styles = ["standard", "compact", "spaced", "centered"]
+        header_style = random.choice(header_styles)
+        
+        if header_style == "centered":
+            # Centered header
+            state_header = f"{state_name.upper()} DRIVER LICENSE"
+            header_bbox = draw.textbbox((0, 0), state_header, font=header_font)
+            header_width = header_bbox[2] - header_bbox[0]
+            header_x = (img_size[0] - header_width) // 2
+            draw.text((header_x, y), state_header, font=header_font, fill=header_color)
+            bbox = draw.textbbox((header_x, y), state_header, font=header_font)
+            ner_annotations["state"] = {"text": state_name, "bounding_box": list(bbox)}
+            y = bbox[3] + base_spacing + spacing_variation
+        else:
+            # Standard left-aligned header
+            header_variants = [
+                f"{state_name.upper()} DRIVER LICENSE",
+                f"{state_name.upper()} DRIVER'S LICENSE", 
+                f"{state_name.upper()} DRIVERS LICENSE",
+                f"STATE OF {state_name.upper()} DRIVER LICENSE"
+            ]
+            state_header = random.choice(header_variants)
+            draw.text((x_left, y), state_header, font=header_font, fill=header_color)
+            bbox = draw.textbbox((x_left, y), state_header, font=header_font)
+            ner_annotations["state"] = {"text": state_name, "bounding_box": list(bbox)}
+            y = bbox[3] + base_spacing + spacing_variation
+        
+        # State abbreviation placement with variation
+        abbr_positions = [
+            (img_size[0] - 80, 20),
+            (img_size[0] - 100, 25),
+            (img_size[0] - 90, 30),
+            (img_size[0] - 70, 15)
+        ]
+        abbr_x, abbr_y = random.choice(abbr_positions)
+        draw.text((abbr_x, abbr_y), state_abbr, font=large_font, fill=accent_color)
+        
+        # License number with varied prefixes
+        license_prefixes = ["DL", "LIC", "LICENSE", "ID", state_abbr, ""]
+        prefix = random.choice(license_prefixes)
+        if prefix:
+            lic_text = f"{prefix} {metadata['license_number']}"
+        else:
+            lic_text = metadata['license_number']
+        
+        draw.text((x_left, y), lic_text, font=large_font, fill=text_color)
+        bbox = draw.textbbox((x_left, y), lic_text, font=large_font)
+        ner_annotations["license_number"] = {"text": metadata['license_number'], "bounding_box": list(bbox)}
+        y = bbox[3] + base_spacing + 5
+        
+        # FIXED: Better photo placeholder positioning and size calculation
+        photo_sizes = [(120, 150), (110, 140), (130, 160), (125, 155)]
+        photo_size = random.choice(photo_sizes)
+        photo_margin = random.randint(30, 45)
+        photo_x = img_size[0] - photo_size[0] - photo_margin
+        photo_y = y
+        
+        # Calculate photo boundaries for overlap detection
+        photo_left = photo_x
+        photo_right = photo_x + photo_size[0]
+        photo_top = photo_y
+        photo_bottom = photo_y + photo_size[1]
+        
+        # Varied photo placeholder styles
+        photo_styles = ["standard", "rounded", "bordered"]
+        photo_style = random.choice(photo_styles)
+        
+        if photo_style == "rounded":
+            # Simulate rounded corners with multiple rectangles
+            draw.rectangle([photo_x+2, photo_y, photo_x + photo_size[0]-2, photo_y + photo_size[1]], 
+                        outline="gray", fill="#e5e5e5")
+            draw.rectangle([photo_x, photo_y+2, photo_x + photo_size[0], photo_y + photo_size[1]-2], 
+                        outline="gray", fill="#e5e5e5")
+        elif photo_style == "bordered":
+            draw.rectangle([photo_x-2, photo_y-2, photo_x + photo_size[0]+2, photo_y + photo_size[1]+2], 
+                        outline=accent_color, fill=accent_color, width=2)
+            draw.rectangle([photo_x, photo_y, photo_x + photo_size[0], photo_y + photo_size[1]], 
+                        outline="gray", fill="#e0e0e0")
+        else:
+            draw.rectangle([photo_x, photo_y, photo_x + photo_size[0], photo_y + photo_size[1]], 
+                        outline="gray", fill="gray")
+        
+        # Varied photo text
+        photo_texts = ["PHOTO", "PICTURE", "IMAGE", "ID PHOTO", ""]
+        photo_text = random.choice(photo_texts)
+        if photo_text:
+            text_bbox = draw.textbbox((0, 0), photo_text, font=small_font)
+            text_width = text_bbox[2] - text_bbox[0]
+            draw.text((photo_x + (photo_size[0] - text_width)//2, photo_y + 70), 
+                    photo_text, font=small_font, fill="gray")
+        
+        # FIXED: Main information section with better overlap prevention
+        info_layouts = ["standard", "compact", "spaced", "two_column"]
+        info_layout = random.choice(info_layouts)
+        
+        # Field label variations
+        field_labels = {
+            "full_name": random.choice(["Name:", "Full Name:", "NAME:", "Licensee:"]),
+            "address": random.choice(["Address:", "ADDRESS:", "Residence:", "Home Address:"]),
+            "date_of_birth": random.choice(["Date of Birth:", "DOB:", "Born:", "Birth Date:", "DATE OF BIRTH:"]),
+            "sex": random.choice(["Sex:", "Gender:", "SEX:", "M/F:"]),
+            "height": random.choice(["Height:", "HGT:", "HEIGHT:", "Ht:"]),
+            "weight": random.choice(["Weight:", "WGT:", "WEIGHT:", "Wt:"]),
+            "eye_color": random.choice(["Eyes:", "Eye Color:", "EYE:", "EYES:"]),
+            "license_class": random.choice(["Class:", "LICENSE CLASS:", "Type:", "Category:"]),
+            "endorsements": random.choice(["Endorsements:", "ENDORSE:", "End:", "Special:"]),
+            "restrictions": random.choice(["Restrictions:", "RESTRICT:", "Rest:", "Limits:"])
+        }
+        
+        info_items = [
+            (field_labels["full_name"], metadata['full_name'], "full_name"),
+            (field_labels["address"], metadata['address'], "address"),
+            (field_labels["date_of_birth"], metadata['date_of_birth'], "date_of_birth"),
+            (field_labels["sex"], metadata['sex'], "sex"),
+            (field_labels["height"], metadata['height'], "height"),
+            (field_labels["weight"], metadata['weight'], "weight"),
+            (field_labels["eye_color"], metadata['eye_color'], "eye_color"),
+            (field_labels["license_class"], metadata['license_class'], "license_class"),
+            (field_labels["endorsements"], metadata['endorsements'], "endorsements"),
+            (field_labels["restrictions"], metadata['restrictions'], "restrictions")
+        ]
+        
+        if info_layout == "two_column":
+            # FIXED: Better two column layout with proper spacing
+            col1_items = info_items[:5]
+            col2_items = info_items[5:]
+            
+            # Calculate safe column positions
+            max_label_width = max([draw.textbbox((0, 0), item[0], font=regular_font)[2] for item in info_items])
+            col1_value_x = x_left + max_label_width + 10
+            col2_x = max(col1_value_x + 200, x_left + 320)  # Ensure minimum distance
+            col2_value_x = col2_x + max_label_width + 10
+            
+            # Ensure column 2 doesn't overlap with photo
+            if col2_value_x + 150 > photo_left:  # 150px estimated max value width
+                # Fall back to single column if two columns would overlap
+                info_layout = "standard"
+            else:
+                # Column 1
+                col_y = y
+                for label, value, key in col1_items:
+                    draw.text((x_left, col_y), label, font=regular_font, fill=text_color)
+                    draw.text((col1_value_x, col_y), str(value), font=name_font if key == "full_name" else regular_font, fill=text_color)
+                    value_bbox = draw.textbbox((col1_value_x, col_y), str(value), font=name_font if key == "full_name" else regular_font)
+                    ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
+                    col_y += base_spacing + random.randint(0, spacing_variation)
+                
+                # Column 2
+                col_y = y
+                for label, value, key in col2_items:
+                    draw.text((col2_x, col_y), label, font=regular_font, fill=text_color)
+                    draw.text((col2_value_x, col_y), str(value), font=regular_font, fill=text_color)
+                    value_bbox = draw.textbbox((col2_value_x, col_y), str(value), font=regular_font)
+                    ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
+                    col_y += base_spacing + random.randint(0, spacing_variation)
+        
+        if info_layout != "two_column":  # Single column layouts (including fallback)
+            # FIXED: Consistent value alignment
+            max_label_width = max([draw.textbbox((0, 0), item[0], font=regular_font)[2] for item in info_items])
+            value_x = x_left + max_label_width + 15  # Consistent alignment
+            
+            for label, value, key in info_items:
+                # FIXED: Consistent spacing instead of random
+                y += base_spacing + random.randint(0, spacing_variation)
+                
+                # FIXED: Better overlap detection and handling
+                if y >= photo_top and y <= photo_bottom and value_x + 200 > photo_left:
+                    # Skip to below photo if there would be overlap
+                    y = max(y, photo_bottom + 15)
+                
+                draw.text((x_left, y), label, font=regular_font, fill=text_color)
+                
+                font_to_use = name_font if key == "full_name" else regular_font
+                draw.text((value_x, y), str(value), font=font_to_use, fill=text_color)
+                value_bbox = draw.textbbox((value_x, y), str(value), font=font_to_use)
+                
+                ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
+        
+        # FIXED: Better date positioning to avoid overlap
+        date_y = max(y + base_spacing * 2, photo_bottom + 20, img_size[1] - 80)
+        
+        # Date label variations
+        issue_labels = ["Issued:", "ISS:", "Issue Date:", "ISSUED:"]
+        exp_labels = ["Expires:", "EXP:", "Expiration:", "EXPIRES:"]
+        
+        issue_text = f"{random.choice(issue_labels)} {metadata['issue_date']}"
+        draw.text((x_left, date_y), issue_text, font=small_font, fill=text_color)
+        bbox = draw.textbbox((x_left, date_y), issue_text, font=small_font)
+        ner_annotations["issue_date"] = {"text": metadata['issue_date'], "bounding_box": list(bbox)}
+        
+        # FIXED: Better expiration date spacing
+        issue_width = bbox[2] - bbox[0]
+        exp_x = x_left + issue_width + 30  # Consistent spacing
+        exp_text = f"{random.choice(exp_labels)} {metadata['expiration_date']}"
+        draw.text((exp_x, date_y), exp_text, font=small_font, fill=text_color)
+        bbox = draw.textbbox((exp_x, date_y), exp_text, font=small_font)
+        ner_annotations["expiration_date"] = {"text": metadata['expiration_date'], "bounding_box": list(bbox)}
+        
+        # Optional veteran status
+        if metadata['veteran']:
+            vet_labels = ["VETERAN", "VET", "MILITARY VETERAN", "U.S. VETERAN"]
+            vet_text = random.choice(vet_labels)
+            exp_width = bbox[2] - bbox[0]
+            vet_x = exp_x + exp_width + 25  # Consistent spacing
+            if vet_x + 80 < img_size[0]:  # Only add if it fits
+                draw.text((vet_x, date_y), vet_text, font=small_font, fill=accent_color)
+                bbox = draw.textbbox((vet_x, date_y), vet_text, font=small_font)
+                ner_annotations["veteran"] = {"text": metadata['veteran'], "bounding_box": list(bbox)}
+        
+        # Organ donor status with varied labels
+        date_y += base_spacing
+        donor_labels = [
+            f"Organ Donor: {metadata['organ_donor']}",
+            f"DONOR: {metadata['organ_donor']}",
+            f"Organ/Tissue Donor: {metadata['organ_donor']}",
+            f"ANATOMICAL GIFT: {metadata['organ_donor']}"
+        ]
+        donor_text = random.choice(donor_labels)
+        draw.text((x_left, date_y), donor_text, font=small_font, fill=text_color)
+        bbox = draw.textbbox((x_left, date_y), donor_text, font=small_font)
+        ner_annotations["organ_donor"] = {"text": metadata['organ_donor'], "bounding_box": list(bbox)}
+        
+        # Add varied decorative elements for digital licenses
+        if is_digital:
+            decoration_styles = ["minimal", "standard", "ornate"]
+            decoration_style = random.choice(decoration_styles)
+            
+            if decoration_style == "ornate":
+                # Multiple design elements
+                draw.line([(x_left, 60), (img_size[0] - 30, 60)], fill=accent_color, width=2)
+                draw.line([(x_left, 62), (img_size[0] - 30, 62)], fill=header_color, width=1)
+                draw.rectangle([x_left - 15, 10, img_size[0] - 15, img_size[1] - 10], outline=header_color, width=3)
+                draw.rectangle([x_left - 12, 13, img_size[0] - 18, img_size[1] - 13], outline=accent_color, width=1)
+            elif decoration_style == "standard":
+                # Standard elements
+                draw.line([(x_left, 60), (img_size[0] - 30, 60)], fill=accent_color, width=2)
+                draw.rectangle([x_left - 10, 15, img_size[0] - 20, img_size[1] - 15], outline=header_color, width=2)
+            # Minimal has no extra decorations
+            
+            # State seal with varied designs
+            seal_designs = ["circle", "square", "hexagon"]
+            seal_design = random.choice(seal_designs)
+            seal_size = random.randint(35, 45)
+            seal_x, seal_y = img_size[0] - seal_size - random.randint(70, 90), img_size[1] - seal_size - random.randint(50, 70)
+            
+            if seal_design == "circle":
+                draw.ellipse([seal_x, seal_y, seal_x + seal_size, seal_y + seal_size], 
+                            outline=accent_color, width=2)
+            elif seal_design == "square":
+                draw.rectangle([seal_x, seal_y, seal_x + seal_size, seal_y + seal_size], 
+                            outline=accent_color, width=2)
+            else:  # hexagon approximation
+                points = []
+                for i in range(6):
+                    angle = i * 60 * 3.14159 / 180
+                    x = seal_x + seal_size//2 + (seal_size//2 - 2) * math.cos(angle)
+                    y = seal_y + seal_size//2 + (seal_size//2 - 2) * math.sin(angle)
+                    points.extend([x, y])
+                draw.polygon(points, outline=accent_color, width=2)
+            
+            # Seal text variations
+            seal_texts = [state_abbr, "SEAL", "STATE", fake.lexify(text="????", letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ")]
+            seal_text = random.choice(seal_texts)
+            text_bbox = draw.textbbox((0, 0), seal_text, font=small_font)
+            text_width = text_bbox[2] - text_bbox[0]
+            draw.text((seal_x + (seal_size - text_width)//2, seal_y + seal_size//2 - 6), 
+                    seal_text, font=small_font, fill=accent_color)
+        
+        # Apply realistic effects based on document type
+        image_cv = np.array(img)
+        
+        if is_digital:
+            # Digital: varied noise levels and effects
+            noise_level = random.randint(3, 12)
+            noise = np.random.normal(0, noise_level, image_cv.shape).astype(np.uint8)
+            noisy_image = cv2.add(image_cv, noise)
+            
+            # Occasional slight blur
+            if random.random() > 0.6:
+                blur_kernel = random.choice([(3, 3), (5, 5)])
+                noisy_image = cv2.GaussianBlur(noisy_image, blur_kernel, 0)
+            
+            # Occasional compression artifacts
+            if random.random() > 0.7:
+                encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), random.randint(75, 95)]
+                _, encimg = cv2.imencode('.jpg', noisy_image, encode_param)
+                noisy_image = cv2.imdecode(encimg, 1)
+        else:
+            # Scanned: more varied artifacts
+            noise_level = random.randint(15, 30)
+            noise = np.random.normal(0, noise_level, image_cv.shape).astype(np.uint8)
+            noisy_image = cv2.add(image_cv, noise)
+            
+            # Scanning lines with variation
+            if random.random() > 0.5:
+                line_spacing = random.randint(40, 120)
+                line_intensity = random.randint(180, 220)
+                for i in range(0, img_size[1], line_spacing):
+                    cv2.line(noisy_image, (0, i), (img_size[0], i), 
+                            (line_intensity, line_intensity, line_intensity), random.randint(1, 2))
+            
+            # Occasional dust spots
+            if random.random() > 0.8:
+                for _ in range(random.randint(3, 8)):
+                    spot_x = random.randint(0, img_size[0])
+                    spot_y = random.randint(0, img_size[1])
+                    spot_size = random.randint(1, 3)
+                    cv2.circle(noisy_image, (spot_x, spot_y), spot_size, (200, 200, 200), -1)
+        
+        # Convert to RGB
+        if len(noisy_image.shape) == 3:
+            noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+        else:
+            noisy_image_rgb = noisy_image
+        
+        # Convert to PIL for rotation
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+        
+        # Apply rotation with more variation
+        if is_digital:
+            angle = random.uniform(-1.5, 1.5)
+        else:
+            angle = random.uniform(-5, 5)
+        
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
+        
+        # Create document type identifier
+        doc_type = "driving_license"
+        
+        GT_json = {
+            "document_class": doc_type,
+            "NER": ner_annotations
+        }
+        
+        return GT_json, rotated_image
 
+
+    def insurance_card(self, FONTS):
+        """Generate realistic insurance card documents (both scanned and digital versions)"""
+
+        # Different card sizes and orientations with more variety
+        DIGITAL_SIZES = [(800, 500), (850, 530), (900, 560), (780, 490), (820, 520), (880, 550)]
+        SCANNED_SIZES = [(1000, 650), (1100, 700), (1200, 750), (950, 630), (1050, 680), (1150, 720)]
+        
+        # Real insurance company names and types
+        REAL_INSURANCE_COMPANIES = [
+            "Blue Cross Blue Shield", "Aetna", "Cigna", "Humana", "UnitedHealthcare",
+            "Kaiser Permanente", "Anthem", "Health Net", "Molina Healthcare", 
+            "WellCare", "Centene", "Independence Blue Cross", "Highmark",
+            "Medical Mutual", "Priority Health", "Blue Shield of California"
+        ]
+        
+        REAL_PLAN_TYPES = [
+            "HMO", "PPO", "EPO", "POS", "HDHP", "Gold Plan", "Silver Plan", 
+            "Bronze Plan", "Platinum Plan", "Premier", "Essential", "Advantage",
+            "Choice", "Select", "Complete", "Basic", "Plus"
+        ]
+        
+        REAL_NETWORKS = [
+            "In-Network", "Preferred", "Standard", "Extended", "National", 
+            "Regional", "Local Plus", "Premier Network", "Select Network",
+            "Advantage Network", "Complete Care", "Essential Network"
+        ]
+        
+        # Randomly decide if it's digital or scanned
+        is_digital = random.choice([True, False])
+        
+        if is_digital:
+            img_size = random.choice(DIGITAL_SIZES)
+            bg_colors = ["white", "#f8f9fa", "#ffffff", "#fefefe", "#fbfbfb", "#f5f5f5"]
+            bg_color = random.choice(bg_colors)
+        else:
+            img_size = random.choice(SCANNED_SIZES)
+            bg_color = random.choice(["white", "#fffffe", "#fefefe", "#fcfcfc"])
+        
+        img = Image.new('RGB', img_size, bg_color)
+        draw = ImageDraw.Draw(img)
+        
+        # Generate realistic insurance metadata
+        current_date = date.today()
+        
+        # Generate realistic coverage dates
+        plan_start_dates = [
+            date(current_date.year, 1, 1),  # Jan 1st (most common)
+            date(current_date.year, 7, 1),  # July 1st 
+            date(current_date.year - 1, 1, 1),  # Last year Jan 1st
+            current_date - timedelta(days=random.randint(30, 365))  # Random recent date
+        ]
+        effective_date = random.choice(plan_start_dates)
+        
+        # Expiration is typically end of year or one year from effective
+        if effective_date.month == 1 and effective_date.day == 1:
+            expiration_date = date(effective_date.year, 12, 31)
+        else:
+            expiration_date = date(effective_date.year + 1, effective_date.month, effective_date.day) - timedelta(days=1)
+        
+        # Generate realistic member ID patterns
+        member_id_patterns = [
+            f"{fake.random_letter()}{fake.random_letter()}{fake.random_number(digits=9)}",  # AA123456789
+            f"{fake.random_number(digits=3)}{fake.random_letter()}{fake.random_number(digits=8)}",  # 123A45678901
+            f"{fake.random_letter()}{fake.random_number(digits=2)}-{fake.random_number(digits=3)}-{fake.random_number(digits=4)}",  # A12-345-6789
+            f"{fake.random_number(digits=9)}",  # 123456789
+            f"{fake.random_letter()}{fake.random_number(digits=8)}"  # A12345678
+        ]
+        
+        # Generate realistic group numbers (employer-based)
+        group_patterns = [
+            f"{fake.random_number(digits=6)}",  # 123456
+            f"{fake.random_letter()}{fake.random_letter()}{fake.random_number(digits=4)}",  # AB1234
+            f"{fake.random_number(digits=4)}-{fake.random_number(digits=2)}",  # 1234-56
+            f"{fake.random_number(digits=8)}",  # 12345678
+            f"{fake.lexify(text='????', letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ')}{fake.random_number(digits=4)}"  # COMP1234
+        ]
+        
+        # Policy number patterns
+        policy_patterns = [
+            f"POL-{fake.random_number(digits=8)}",
+            f"{fake.random_letter()}{fake.random_letter()}-{fake.random_number(digits=6)}",
+            f"{fake.random_number(digits=3)}-{fake.random_letter()}{fake.random_letter()}-{fake.random_number(digits=4)}",
+            f"P{fake.random_number(digits=9)}",
+            f"{fake.random_number(digits=4)}{fake.random_letter()}{fake.random_number(digits=4)}"
+        ]
+        
+        # Select company and customize
+        insurance_company = random.choice(REAL_INSURANCE_COMPANIES)
+        
+        # Generate realistic copay amounts based on plan type
+        plan_type = random.choice(REAL_PLAN_TYPES)
+        
+        # HMO/EPO typically have lower copays, PPO higher, HDHP very high deductibles
+        if plan_type in ["HMO", "EPO"]:
+            primary_copay = random.randint(15, 35)
+            specialist_copay = random.randint(40, 70)
+            deductible = random.randint(500, 2000)
+        elif plan_type == "PPO":
+            primary_copay = random.randint(25, 50)
+            specialist_copay = random.randint(50, 90)
+            deductible = random.randint(750, 3000)
+        elif plan_type == "HDHP":
+            primary_copay = 0  # HDHP usually no copay until deductible met
+            specialist_copay = 0
+            deductible = random.randint(3000, 7000)
+        else:  # Other plan types
+            primary_copay = random.randint(20, 45)
+            specialist_copay = random.randint(45, 85)
+            deductible = random.randint(1000, 4000)
+        
+        metadata = {
+            "insurance_company": insurance_company,
+            "member_name": fake.name(),
+            "member_id": random.choice(member_id_patterns),
+            "group_number": random.choice(group_patterns),
+            "policy_number": random.choice(policy_patterns),
+            "plan_type": plan_type,
+            "network": random.choice(REAL_NETWORKS),
+            "effective_date": effective_date.strftime("%m/%d/%Y"),
+            "expiration_date": expiration_date.strftime("%m/%d/%Y"),
+            "copay_primary": f"${primary_copay}" if primary_copay > 0 else "After Deductible",
+            "copay_specialist": f"${specialist_copay}" if specialist_copay > 0 else "After Deductible",
+            "deductible": f"${deductible:,}",
+            "out_of_pocket_max": f"${random.randint(deductible * 2, 15000):,}",
+            "rx_generic": f"${random.randint(5, 25)}",
+            "rx_brand": f"${random.randint(25, 75)}",
+            "emergency_room": f"${random.randint(150, 500)}",
+            "urgent_care": f"${random.randint(50, 150)}",
+            "customer_service": fake.phone_number(),
+            "provider_phone": fake.phone_number(),
+            "website": f"www.{insurance_company.lower().replace(' ', '').replace('blue', 'blue')}.com",
+            "address": fake.street_address() + ", " + fake.city() + ", " + fake.state_abbr() + " " + fake.zipcode()
+        }
+        
+        # Initialize coordinates and annotations
+        ner_annotations = {}
+        
+        # Choose fonts with more variety
+        try:
+            available_fonts = FONTS if FONTS else []
+            if available_fonts:
+                company_font = ImageFont.truetype(random.choice(available_fonts), random.randint(24, 32))
+                header_font = ImageFont.truetype(random.choice(available_fonts), random.randint(18, 24))
+                regular_font = ImageFont.truetype(random.choice(available_fonts), random.randint(14, 18))
+                small_font = ImageFont.truetype(random.choice(available_fonts), random.randint(10, 14))
+                medium_font = ImageFont.truetype(random.choice(available_fonts), random.randint(16, 20))
+                tiny_font = ImageFont.truetype(random.choice(available_fonts), random.randint(8, 12))
+            else:
+                raise Exception("No fonts available")
+        except:
+            company_font = ImageFont.load_default()
+            header_font = ImageFont.load_default()
+            regular_font = ImageFont.load_default()
+            small_font = ImageFont.load_default()
+            medium_font = ImageFont.load_default()
+            tiny_font = ImageFont.load_default()
+        
+        # More diverse color schemes based on real insurance companies
+        if is_digital:
+            company_colors = {
+                "Blue Cross Blue Shield": {"primary": "#1e40af", "secondary": "#3b82f6", "accent": "#60a5fa"},
+                "Aetna": {"primary": "#7c3aed", "secondary": "#a855f7", "accent": "#c084fc"},
+                "Cigna": {"primary": "#059669", "secondary": "#10b981", "accent": "#34d399"},
+                "UnitedHealthcare": {"primary": "#1e3a8a", "secondary": "#2563eb", "accent": "#3b82f6"},
+                "Humana": {"primary": "#dc2626", "secondary": "#ef4444", "accent": "#f87171"},
+                "default": {"primary": "#1f2937", "secondary": "#374151", "accent": "#6b7280"}
+            }
+            
+            colors = company_colors.get(insurance_company, company_colors["default"])
+            primary_color = colors["primary"]
+            secondary_color = colors["secondary"]
+            accent_color = colors["accent"]
+            text_color = "black"
+        else:
+            primary_color = random.choice(["black", "#1a1a1a", "#2d2d2d"])
+            secondary_color = random.choice(["#333333", "#404040", "#555555"])
+            accent_color = random.choice(["#666666", "#777777", "#888888"])
+            text_color = random.choice(["black", "#0a0a0a", "#1a1a1a"])
+        
+        # FIXED: More consistent layout parameters
+        y_start = random.randint(20, 30)
+        x_left = random.randint(25, 40)
+        # Reduced spacing variation for better consistency
+        spacing_base = 20  # Consistent base spacing
+        spacing_variation = random.randint(1, 4)  # Much smaller variation
+        
+        y = y_start
+        
+        # Diverse header layouts
+        header_styles = ["standard", "centered", "logo_right", "compact"]
+        header_style = random.choice(header_styles)
+        
+        if header_style == "centered":
+            # Centered company name
+            company_bbox = draw.textbbox((0, 0), metadata['insurance_company'], font=company_font)
+            company_width = company_bbox[2] - company_bbox[0]
+            company_x = (img_size[0] - company_width) // 2
+            draw.text((company_x, y), metadata['insurance_company'], font=company_font, fill=primary_color)
+            bbox = draw.textbbox((company_x, y), metadata['insurance_company'], font=company_font)
+            ner_annotations["insurance_company"] = {"text": metadata['insurance_company'], "bounding_box": list(bbox)}
+            y = bbox[3] + spacing_base
+        elif header_style == "logo_right":
+            # Company name left, logo placeholder right
+            draw.text((x_left, y), metadata['insurance_company'], font=company_font, fill=primary_color)
+            bbox = draw.textbbox((x_left, y), metadata['insurance_company'], font=company_font)
+            ner_annotations["insurance_company"] = {"text": metadata['insurance_company'], "bounding_box": list(bbox)}
+            
+            # Logo placeholder
+            logo_size = random.randint(50, 70)
+            logo_x = img_size[0] - logo_size - 30
+            logo_y = y - 5
+            draw.rectangle([logo_x, logo_y, logo_x + logo_size, logo_y + logo_size], 
+                        outline=primary_color, fill="#f8f9fa", width=2)
+            draw.text((logo_x + 20, logo_y + 25), "LOGO", font=tiny_font, fill=primary_color)
+            y = max(bbox[3], logo_y + logo_size) + spacing_base
+        else:
+            # Standard left-aligned
+            draw.text((x_left, y), metadata['insurance_company'], font=company_font, fill=primary_color)
+            bbox = draw.textbbox((x_left, y), metadata['insurance_company'], font=company_font)
+            ner_annotations["insurance_company"] = {"text": metadata['insurance_company'], "bounding_box": list(bbox)}
+            y = bbox[3] + spacing_base
+        
+        # Insurance type subtitle with realistic descriptions
+        insurance_subtitles = [
+            "Health Insurance Plan", "Medical Coverage", "Healthcare Plan", 
+            "Medical Insurance", "Health Plan", "Medical Benefits Plan",
+            "Comprehensive Health Coverage", "Health & Medical Insurance"
+        ]
+        insurance_type_text = random.choice(insurance_subtitles)
+        draw.text((x_left, y), insurance_type_text, font=regular_font, fill=secondary_color)
+        y += spacing_base + 10
+        
+        # Card layout variations
+        layout_styles = ["standard", "compact", "sectioned", "tabular"]
+        layout_style = random.choice(layout_styles)
+        
+        # Member information section
+        member_section_titles = [
+            "Member Information", "Subscriber Details", "Member Info", 
+            "Primary Member", "Policyholder Information", "Member Data"
+        ]
+        member_section_title = random.choice(member_section_titles)
+        draw.text((x_left, y), member_section_title, font=header_font, fill=primary_color)
+        y += spacing_base + spacing_variation
+        
+        # Field label variations with realistic insurance terminology
+        field_labels = {
+            "member_name": random.choice(["Member Name:", "Name:", "Subscriber:", "Primary Member:", "Insured:"]),
+            "member_id": random.choice(["Member ID:", "ID Number:", "Subscriber ID:", "Member #:", "ID#:"]),
+            "group_number": random.choice(["Group Number:", "Group #:", "Employer Group:", "Group ID:", "Grp:"]),
+            "policy_number": random.choice(["Policy Number:", "Policy #:", "Contract #:", "Plan ID:", "Pol:"]),
+            "plan_type": random.choice(["Plan Type:", "Plan:", "Coverage Type:", "Product:", "Plan Name:"]),
+            "network": random.choice(["Network:", "Provider Network:", "Network Type:", "Coverage Area:", "Net:"])
+        }
+        
+        # FIXED: Member details with consistent alignment
+        member_items = [
+            (field_labels["member_name"], metadata['member_name'], "member_name"),
+            (field_labels["member_id"], metadata['member_id'], "member_id"),
+            (field_labels["group_number"], metadata['group_number'], "group_number"),
+            (field_labels["policy_number"], metadata['policy_number'], "policy_number"),
+            (field_labels["plan_type"], metadata['plan_type'], "plan_type"),
+            (field_labels["network"], metadata['network'], "network")
+        ]
+        
+        # Calculate consistent column alignment for all layouts
+        max_label_width = max([draw.textbbox((0, 0), label, font=regular_font)[2] for label, _, _ in member_items])
+        value_x = x_left + max_label_width + 15  # Consistent alignment
+        
+        if layout_style == "tabular":
+            # Tabular layout with aligned columns
+            for label, value, key in member_items:
+                draw.text((x_left, y), label, font=regular_font, fill=text_color)
+                draw.text((value_x, y), str(value), font=regular_font, fill=text_color)
+                value_bbox = draw.textbbox((value_x, y), str(value), font=regular_font)
+                ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
+                y += spacing_base + spacing_variation
+        else:
+            # FIXED: Standard layout with consistent alignment
+            for label, value, key in member_items:
+                draw.text((x_left, y), label, font=regular_font, fill=text_color)
+                draw.text((value_x, y), str(value), font=regular_font, fill=text_color)
+                value_bbox = draw.textbbox((value_x, y), str(value), font=regular_font)
+                ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
+                y += spacing_base + spacing_variation
+        
+        # Coverage dates section
+        y += spacing_base
+        date_section_titles = [
+            "Coverage Period", "Plan Dates", "Coverage Dates", 
+            "Effective Period", "Plan Period", "Coverage Term"
+        ]
+        dates_title = random.choice(date_section_titles)
+        draw.text((x_left, y), dates_title, font=header_font, fill=primary_color)
+        y += spacing_base + spacing_variation
+        
+        # FIXED: Date labels with better spacing
+        effective_labels = ["Effective Date:", "Start Date:", "From:", "Effective:", "Coverage Begins:"]
+        expiration_labels = ["Expiration Date:", "End Date:", "To:", "Expires:", "Coverage Ends:"]
+        
+        eff_text = f"{random.choice(effective_labels)} {metadata['effective_date']}"
+        draw.text((x_left, y), eff_text, font=regular_font, fill=text_color)
+        bbox = draw.textbbox((x_left, y), eff_text, font=regular_font)
+        ner_annotations["effective_date"] = {"text": metadata['effective_date'], "bounding_box": list(bbox)}
+        
+        # FIXED: Better expiration date spacing calculation
+        eff_width = bbox[2] - bbox[0]
+        exp_x = x_left + eff_width + 30  # Consistent spacing
+        exp_text = f"{random.choice(expiration_labels)} {metadata['expiration_date']}"
+        draw.text((exp_x, y), exp_text, font=regular_font, fill=text_color)
+        bbox = draw.textbbox((exp_x, y), exp_text, font=regular_font)
+        ner_annotations["expiration_date"] = {"text": metadata['expiration_date'], "bounding_box": list(bbox)}
+        y += spacing_base + spacing_base
+        
+        # Benefits section with realistic layouts
+        benefit_section_titles = [
+            "Benefits Summary", "Coverage Benefits", "Plan Benefits", 
+            "Copayments & Deductibles", "Cost Sharing", "Benefit Details"
+        ]
+        benefits_title = random.choice(benefit_section_titles)
+        draw.text((x_left, y), benefits_title, font=header_font, fill=primary_color)
+        y += spacing_base + spacing_variation
+        
+        # FIXED: Benefits layout with better column management
+        benefits_layout = random.choice(["single_column", "two_column", "grid"])
+        
+        # Benefit labels with real insurance terminology
+        benefit_labels = {
+            "copay_primary": random.choice(["Primary Care:", "PCP Visit:", "Primary Doctor:", "Family Doctor:", "PCP:"]),
+            "copay_specialist": random.choice(["Specialist:", "Specialist Visit:", "Specialist Care:", "Spec:", "Specialist Copay:"]),
+            "deductible": random.choice(["Annual Deductible:", "Deductible:", "Individual Deductible:", "Ded:", "Annual Ded:"]),
+            "out_of_pocket_max": random.choice(["Out-of-Pocket Max:", "Max OOP:", "Annual Max:", "OOP Maximum:", "Max Out-of-Pocket:"]),
+            "rx_generic": random.choice(["Generic Rx:", "Generic Drugs:", "Generic:", "Tier 1 Rx:", "Generic Prescription:"]),
+            "rx_brand": random.choice(["Brand Rx:", "Brand Drugs:", "Preferred Brand:", "Tier 2 Rx:", "Brand Name Rx:"]),
+            "emergency_room": random.choice(["Emergency Room:", "ER Visit:", "Emergency Care:", "ER Copay:", "Emergency:"]),
+            "urgent_care": random.choice(["Urgent Care:", "Urgent Care Visit:", "Walk-in Clinic:", "Urgent Care Copay:", "UC:"])
+        }
+        
+        if benefits_layout == "two_column":
+            # FIXED: Better two-column benefit layout with proper spacing
+            benefits_col1 = [
+                (benefit_labels["copay_primary"], metadata['copay_primary'], "copay_primary"),
+                (benefit_labels["copay_specialist"], metadata['copay_specialist'], "copay_specialist"),
+                (benefit_labels["deductible"], metadata['deductible'], "deductible"),
+                (benefit_labels["rx_generic"], metadata['rx_generic'], "rx_generic")
+            ]
+            
+            benefits_col2 = [
+                (benefit_labels["out_of_pocket_max"], metadata['out_of_pocket_max'], "out_of_pocket_max"),
+                (benefit_labels["rx_brand"], metadata['rx_brand'], "rx_brand"),
+                (benefit_labels["emergency_room"], metadata['emergency_room'], "emergency_room"),
+                (benefit_labels["urgent_care"], metadata['urgent_care'], "urgent_care")
+            ]
+            
+            # Calculate safe column positions
+            col1_x = x_left
+            col2_x = x_left + int(img_size[0] * 0.5)
+            
+            # Ensure columns don't exceed image bounds
+            max_col2_label_width = max([draw.textbbox((0, 0), item[0], font=small_font)[2] for item in benefits_col2])
+            if col2_x + max_col2_label_width + 100 > img_size[0]:
+                # Fall back to single column if two columns won't fit
+                benefits_layout = "single_column"
+            else:
+                col_y = y
+                
+                # Draw columns with consistent spacing
+                for i, (label, value, key) in enumerate(benefits_col1):
+                    draw.text((col1_x, col_y), label, font=small_font, fill=text_color)
+                    draw.text((col1_x, col_y + 12), str(value), font=medium_font, fill=primary_color)
+                    value_bbox = draw.textbbox((col1_x, col_y + 12), str(value), font=medium_font)
+                    ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
+                    col_y += spacing_base + spacing_base
+                
+                col_y = y
+                for i, (label, value, key) in enumerate(benefits_col2):
+                    if i < len(benefits_col2):
+                        draw.text((col2_x, col_y), label, font=small_font, fill=text_color)
+                        draw.text((col2_x, col_y + 12), str(value), font=medium_font, fill=primary_color)
+                        value_bbox = draw.textbbox((col2_x, col_y + 12), str(value), font=medium_font)
+                        ner_annotations[key] = {"text": str(value), "bounding_box": list(value_bbox)}
+                        col_y += spacing_base + spacing_base
+                
+                y = col_y
+        
+        if benefits_layout != "two_column":  # Single column benefit layout (including fallback)
+            all_benefits = [
+                (benefit_labels["copay_primary"], metadata['copay_primary'], "copay_primary"),
+                (benefit_labels["copay_specialist"], metadata['copay_specialist'], "copay_specialist"),
+                (benefit_labels["deductible"], metadata['deductible'], "deductible"),
+                (benefit_labels["out_of_pocket_max"], metadata['out_of_pocket_max'], "out_of_pocket_max"),
+                (benefit_labels["rx_generic"], metadata['rx_generic'], "rx_generic"),
+                (benefit_labels["rx_brand"], metadata['rx_brand'], "rx_brand"),
+                (benefit_labels["emergency_room"], metadata['emergency_room'], "emergency_room"),
+                (benefit_labels["urgent_care"], metadata['urgent_care'], "urgent_care")
+            ]
+            
+            for label, value, key in all_benefits:
+                draw.text((x_left, y), f"{label} {value}", font=regular_font, fill=text_color)
+                bbox = draw.textbbox((x_left, y), f"{label} {value}", font=regular_font)
+                ner_annotations[key] = {"text": str(value), "bounding_box": list(bbox)}
+                y += spacing_base + spacing_variation
+        
+        # FIXED: Better contact information positioning
+        contact_y = max(y + spacing_base, img_size[1] - 80)
+        contact_titles = [
+            "Contact Information", "Customer Service", "Questions? Call Us", 
+            "Need Help?", "Contact Details", "Customer Support"
+        ]
+        contact_title = random.choice(contact_titles)
+        draw.text((x_left, contact_y), contact_title, font=header_font, fill=primary_color)
+        contact_y += spacing_base
+        
+        # Contact details with realistic formatting
+        contact_formats = [
+            f"Customer Service: {metadata['customer_service']} | Provider Services: {metadata['provider_phone']}",
+            f"Call: {metadata['customer_service']} | Web: {metadata['website']}",
+            f"Phone: {metadata['customer_service']} | Online: {metadata['website']}",
+            f"{metadata['customer_service']} | {metadata['website']}"
+        ]
+        contact_info = random.choice(contact_formats)
+        draw.text((x_left, contact_y), contact_info, font=small_font, fill=text_color)
+        bbox = draw.textbbox((x_left, contact_y), contact_info, font=small_font)
+        
+        # Store contact annotations (using the full contact line bbox for simplicity)
+        ner_annotations["customer_service"] = {"text": metadata['customer_service'], "bounding_box": list(bbox)}
+        ner_annotations["provider_phone"] = {"text": metadata['provider_phone'], "bounding_box": list(bbox)}
+        ner_annotations["website"] = {"text": metadata['website'], "bounding_box": list(bbox)}
+        
+        # Add varied decorative elements for digital cards
+        if is_digital:
+            decoration_styles = ["minimal", "standard", "corporate", "modern"]
+            decoration_style = random.choice(decoration_styles)
+            
+            if decoration_style == "corporate":
+                # Corporate style with multiple elements
+                draw.rectangle([10, 10, img_size[0] - 10, img_size[1] - 10], outline=primary_color, width=4)
+                draw.rectangle([15, 15, img_size[0] - 15, img_size[1] - 15], outline=accent_color, width=1)
+                draw.line([(x_left, 90), (img_size[0] - 30, 90)], fill=secondary_color, width=3)
+                draw.line([(x_left, 93), (img_size[0] - 30, 93)], fill=accent_color, width=1)
+            elif decoration_style == "modern":
+                # Modern style with gradients simulation
+                for i in range(5):
+                    alpha = 255 - (i * 40)
+                    draw.rectangle([15 + i, 15 + i, img_size[0] - 15 - i, img_size[1] - 15 - i], 
+                                outline=primary_color, width=1)
+                draw.line([(x_left, 85), (img_size[0] - 30, 85)], fill=accent_color, width=2)
+            elif decoration_style == "standard":
+                # Standard insurance card style
+                draw.rectangle([15, 15, img_size[0] - 15, img_size[1] - 15], outline=primary_color, width=3)
+                draw.line([(x_left, 80), (img_size[0] - 30, 80)], fill=secondary_color, width=2)
+            # Minimal has no decorations
+            
+            # Company-specific design elements
+            if "Blue" in insurance_company:
+                # Add blue-themed elements
+                for i in range(3):
+                    y_pos = 40 + (i * 15)
+                    draw.line([(img_size[0] - 50, y_pos), (img_size[0] - 20, y_pos)], fill=accent_color, width=2)
+        
+        # Apply realistic effects
+        image_cv = np.array(img)
+        
+        if is_digital:
+            # Digital effects with variation
+            noise_level = random.randint(2, 8)
+            noise = np.random.normal(0, noise_level, image_cv.shape).astype(np.uint8)
+            noisy_image = cv2.add(image_cv, noise)
+            
+            # Occasional compression artifacts
+            if random.random() > 0.6:
+                encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), random.randint(80, 95)]
+                _, encimg = cv2.imencode('.jpg', noisy_image, encode_param)
+                noisy_image = cv2.imdecode(encimg, 1)
+            
+            # Slight blur for phone camera captures
+            if random.random() > 0.7:
+                noisy_image = cv2.GaussianBlur(noisy_image, (3, 3), 0)
+        else:
+            # Scanned effects with more variety
+            noise_level = random.randint(12, 25)
+            noise = np.random.normal(0, noise_level, image_cv.shape).astype(np.uint8)
+            noisy_image = cv2.add(image_cv, noise)
+            
+            # Scanner artifacts
+            if random.random() > 0.4:
+                line_spacing = random.randint(60, 120)
+                for i in range(0, img_size[1], line_spacing):
+                    intensity = random.randint(210, 240)
+                    cv2.line(noisy_image, (0, i), (img_size[0], i), 
+                            (intensity, intensity, intensity), random.randint(1, 2))
+            
+            # Add scanner edge darkening
+            if random.random() > 0.6:
+                h, w = noisy_image.shape[:2]
+                # Create gradient mask for edge darkening
+                mask = np.ones((h, w), dtype=np.float32)
+                edge_width = random.randint(20, 50)
+                
+                # Darken edges
+                mask[:edge_width, :] *= 0.9
+                mask[-edge_width:, :] *= 0.9
+                mask[:, :edge_width] *= 0.9
+                mask[:, -edge_width:] *= 0.9
+                
+                # Apply mask
+                for c in range(3):
+                    noisy_image[:, :, c] = (noisy_image[:, :, c] * mask).astype(np.uint8)
+            
+            # Add occasional wrinkles or fold lines
+            if random.random() > 0.8:
+                fold_y = random.randint(img_size[1] // 4, 3 * img_size[1] // 4)
+                fold_intensity = random.randint(180, 220)
+                cv2.line(noisy_image, (0, fold_y), (img_size[0], fold_y), 
+                        (fold_intensity, fold_intensity, fold_intensity), random.randint(2, 4))
+            
+            # Add dust spots or scanning artifacts
+            if random.random() > 0.7:
+                num_spots = random.randint(2, 6)
+                for _ in range(num_spots):
+                    spot_x = random.randint(0, img_size[0])
+                    spot_y = random.randint(0, img_size[1])
+                    spot_size = random.randint(1, 4)
+                    spot_intensity = random.randint(200, 250)
+                    cv2.circle(noisy_image, (spot_x, spot_y), spot_size, 
+                            (spot_intensity, spot_intensity, spot_intensity), -1)
+            
+            # Add slight perspective distortion for scanned cards
+            if random.random() > 0.8:
+                rows, cols = noisy_image.shape[:2]
+                # Create slight perspective transformation
+                distortion = random.randint(3, 8)
+                pts1 = np.float32([[0, 0], [cols, 0], [0, rows], [cols, rows]])
+                pts2 = np.float32([
+                    [random.randint(-distortion, distortion), random.randint(-distortion, distortion)], 
+                    [cols + random.randint(-distortion, distortion), random.randint(-distortion, distortion)], 
+                    [random.randint(-distortion, distortion), rows + random.randint(-distortion, distortion)], 
+                    [cols + random.randint(-distortion, distortion), rows + random.randint(-distortion, distortion)]
+                ])
+                matrix = cv2.getPerspectiveTransform(pts1, pts2)
+                noisy_image = cv2.warpPerspective(noisy_image, matrix, (cols, rows), 
+                                                borderMode=cv2.BORDER_CONSTANT, 
+                                                borderValue=(255, 255, 255))
+        
+        # Convert to RGB format
+        if len(noisy_image.shape) == 3:
+            noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+        else:
+            noisy_image_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_GRAY2RGB)
+        
+        # Convert to PIL for rotation
+        noisy_pil_image = Image.fromarray(noisy_image_rgb)
+        
+        # Apply rotation with realistic variation
+        if is_digital:
+            # Digital cards: minimal rotation (phone camera slight tilt)
+            angle = random.uniform(-1.0, 1.0)
+        else:
+            # Scanned cards: more rotation variation
+            angle = random.uniform(-4.0, 4.0)
+        
+        # Apply the rotation and bounding box transformation
+        rotated_image, ner_annotations = self.transform_bounding_boxes(ner_annotations, angle, noisy_pil_image)
+        rotated_image = np.array(rotated_image)
+        
+        # Create document type identifier
+        doc_type = "insurance_card"
+        
+        GT_json = {
+            "document_class": doc_type,
+            "NER": ner_annotations
+        }
+        
+        return GT_json, rotated_image
 
     def other(self, FONTS):
         IMAGE_SIZES = [(1000, 1400), (1200, 1600), (1400, 1800), (1600, 2000), (1800, 2200), (2000, 2400)]
@@ -1905,6 +2973,8 @@ class GenerateDocument:
             self.scientific_report:FONTS,
             self.specifications:FONTS,
             self.medical_document:FONTS,
+            self.driving_license:FONTS,
+            self.insurance_card:FONTS,
             self.other:FONTS
         }
 

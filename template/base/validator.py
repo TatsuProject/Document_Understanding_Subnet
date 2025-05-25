@@ -283,7 +283,7 @@ class BaseValidatorNeuron(BaseNeuron):
         """
         top_reward_threshold = 0.05
         max_consecutive_rewards = 18
-        subnet_weight = 0.9  # Fixed weight for subnet (UID 0)
+        subnet_weight = 0.75  # Fixed weight for subnet (UID 0)
 
         if np.isnan(self.scores).any():
             bt.logging.warning("Scores contain NaN values.")
@@ -325,7 +325,7 @@ class BaseValidatorNeuron(BaseNeuron):
                     weight = (scores_flat[idx] / total) * remaining_weight
                     final_weights[uids.index(uid)] = weight
 
-            bt.logging.info(f"Multiple high scorers (≥0.95): {list(zip(high_score_uids, high_scores))}")
+            bt.logging.info(f"Multiple high scorers (≥{max_threshold}): {list(zip(high_score_uids, high_scores))}")
             bt.logging.info(f"Distributing {remaining_weight} emission proportionally among high performers.")
 
         else:
